@@ -1,0 +1,46 @@
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+ENV/
+
+# Environment Variables & Local Settings
+.env
+.env.*
+!.env.example
+local_settings.py
+
+# Database
+db.sqlite3
+db.sqlite3-journal
+*.sqlite
+*.sqlite3
+*.db
+
+# Django Static & User Uploaded Media
+/staticfiles/
+/static_root/
+/media/
+
+# Scraped / Local CSV & Data Files
+*.csv
+*.xlsx
+
+# Logs, Cache & Testing
+*.log
+logs/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.cache/
+
+# IDE & OS Metadata
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
