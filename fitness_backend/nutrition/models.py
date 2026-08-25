@@ -4,8 +4,13 @@ from django.db import models
 
 class FoodCategory(models.TextChoices):
     RICE_GRAINS = "rice_grains", "Rice & Grains"
+    ROOTS_TUBERS = "roots_tubers", "Starchy Roots & Tubers"
+    NUTS_LEGUMES = "nuts_legumes", "Nuts, Legumes & Seeds"
     VIANDS_MEAT = "viands_meat", "Viands - Meat & Poultry"
     VIANDS_FISH = "viands_fish", "Viands - Fish & Seafood"
+    EGGS = "eggs", "Eggs"
+    DAIRY = "dairy", "Milk & Dairy"
+    FATS_OILS = "fats_oils", "Fats & Oils"
     VEGETABLES = "vegetables", "Vegetables"
     FRUITS = "fruits", "Fruits"
     SOUPS = "soups", "Soups & Stews"
@@ -49,6 +54,12 @@ class FoodItem(models.Model):
         max_length=100,
         default="PhilFCT (cross-referenced)",
         help_text="Data provenance, e.g. 'PhilFCT 2019', 'FNRI FOI request', 'estimated'",
+    )
+    external_id = models.CharField(
+        max_length=20,
+        blank=True,
+        db_index=True,
+        help_text="Source dataset's own ID (e.g. PhilFCT Food_ID like 'A001'), for idempotent bulk imports",
     )
 
     class Meta:

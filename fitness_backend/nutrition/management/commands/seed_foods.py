@@ -1,15 +1,20 @@
 """
-Seeds a starter Filipino food database.
+Seeds a starter set of common Filipino composite dishes (Adobo, Sinigang,
+etc.) that PhilFCT's raw proximates table doesn't cover as single items.
 
-IMPORTANT: These calorie/macro values are reasonable estimates based on
-typical preparations and general nutrition knowledge -- they are NOT
-transcribed from PhilFCT's published tables (no bulk PhilFCT dataset
-was available). Before using these numbers in your thesis Results,
-cross-check each entry against the PhilFCT Online Database
+For real, cited PhilFCT data (1,500+ items straight from the Philippine
+Food Composition Table), see `import_philfct` instead -- that command
+imports nutrition/data/philfct_proximates_enriched.csv and marks each
+row's `source` as "PhilFCT, item <Food_ID>".
+
+IMPORTANT: The calorie/macro values below are reasonable estimates based
+on typical preparations and general nutrition knowledge, not transcribed
+from any published table. Before using these numbers in your thesis
+Results, cross-check each entry against the PhilFCT Online Database
 (https://i.fnri.dost.gov.ph/fct/library/search_item) or your FNRI FOI
 response, and update the `source` field accordingly (e.g. from
-"estimated" to "PhilFCT 2019, item #XXXX"). This keeps your dataset
-citable and your methodology defensible.
+"Estimated composite dish..." to "PhilFCT 2019, item #XXXX"). This keeps
+your dataset citable and your methodology defensible.
 
 Run with: python manage.py seed_foods
 """
@@ -105,7 +110,7 @@ class Command(BaseCommand):
                     "protein_g": protein_g,
                     "carbs_g": carbs_g,
                     "fat_g": fat_g,
-                    "source": "estimated (verify against PhilFCT before publishing)",
+                    "source": "Estimated composite dish (not in PhilFCT proximates table; verify before publishing)",
                 },
             )
             if created:
