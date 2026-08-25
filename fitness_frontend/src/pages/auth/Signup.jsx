@@ -130,7 +130,7 @@ export default function Signup() {
     <div className="page" style={{ gap: 20 }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: "var(--chili)" }}>
-          PRIMEFIT
+          FITNESS ASSISTANT
         </div>
         <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 4 }}>Step {step} of 3</p>
       </div>

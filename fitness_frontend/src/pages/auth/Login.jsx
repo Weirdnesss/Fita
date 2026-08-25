@@ -29,7 +29,7 @@ export default function Login() {
     <div className="page" style={{ justifyContent: "center", gap: 28 }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 32, color: "var(--chili)" }}>
-          PRIMEFIT
+          FITNESS ASSISTANT
         </div>
         <p style={{ color: "var(--text-dim)", marginTop: 4 }}>Your personal fitness assistant</p>
       </div>

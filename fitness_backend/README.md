@@ -1,5 +1,4 @@
-<<<<<<< HEAD
-# PrimeFit Backend (Accounts module)
+# Fitness Assistant Backend (Accounts module)
 
 ## Setup
 ```
@@ -67,7 +66,7 @@ or if wger changes their API shape again, independent of the sync command.
 ## Nutrition module (/nutrition/)
 Uses a **local Filipino food database** (FoodItem model) instead of an
 external API -- no rate limits, works offline, and is the thesis's
-main improvement over the original's US-centric free-tier API.
+main improvement over a typical US-centric free-tier API.
 
 - GET   /foods/search/?q=adobo&category=viands_meat   -- search local DB
 - GET   /profile/                                       -- daily macro goals
@@ -137,16 +136,12 @@ grounded in the rule-based insights rather than inventing feedback).
   Defaults to your ProgressReportSettings.
 - GET/PATCH /settings/              -- day_interval, report_type, is_enabled
 
-Note on scheduling: the original thesis used Celery + django-celery-beat
-for automatic midnight generation. This build uses on-demand generation
-(a button/API call) instead -- simpler to run and demo without a task
-queue. ProgressReportSettings.next_generation_date() is still there if
-you want to add a scheduler (Celery, django-crontab, or even a simple
-management command + cron) later.
+Note on scheduling: this build uses on-demand generation (a button/API
+call) instead of automatic midnight generation -- simpler to run and
+demo without a task queue. ProgressReportSettings.next_generation_date()
+is still there if you want to add a scheduler (Celery, django-crontab,
+or even a simple management command + cron) later.
 
 Uses the same GROQ_API_KEY as the coach app. If it's missing, /generate/
 returns 502 immediately (before touching the database) rather than
 silently failing partway through.
-=======
-# Fitness-Assistant
->>>>>>> a944bdbe0b8d682cecf72f064beb8dc24699916e

@@ -2,8 +2,7 @@
 Pulls together everything the Fitness Assistant needs to know about a
 user -- profile, recent workouts, recent nutrition -- into one plain-text
 summary that gets injected into the LLM's system prompt. This is the
-"contextual awareness" layer: same role as the original thesis's
-DataCollectionService, rebuilt against our own models.
+"contextual awareness" layer, built against our own models.
 """
 
 from django.utils import timezone

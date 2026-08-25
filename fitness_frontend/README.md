@@ -1,6 +1,6 @@
-# PrimeFit Frontend
+# Fitness Assistant Frontend
 
-React + Vite PWA-style frontend for the PrimeFit fitness assistant.
+React + Vite PWA-style frontend for the Fitness Assistant app.
 Mobile-first (max-width 480px), dark gym-floor design system, bottom
 tab navigation.
 
@@ -66,12 +66,12 @@ README.
 
 ## Known simplifications worth knowing about
 
-- No offline/service-worker support yet (the original thesis's PWA
-  requirement) — this is a plain SPA. Adding a service worker via
-  `vite-plugin-pwa` is a reasonable next step if you want true offline
-  support for your evaluation.
+- No offline/service-worker support yet (the PWA requirement) — this is
+  a plain SPA. Adding a service worker via `vite-plugin-pwa` is a
+  reasonable next step if you want true offline support for your
+  evaluation.
 - Optimistic chat UI rolls back cleanly on failure, but there's no
   retry/resend button yet — the user has to retype.
-- No image uploads (before/after pictures mentioned in the original's
-  Account Module) — not built here since the backend doesn't have that
-  field yet either.
+- No image uploads (before/after pictures mentioned in the Account
+  Module) — not built here since the backend doesn't have that field
+  yet either.

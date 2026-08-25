@@ -25,6 +25,26 @@ export function ErrorBanner({ message }) {
   );
 }
 
+export function OfflineBanner() {
+  return (
+    <div
+      style={{
+        background: "var(--turmeric-tint)",
+        border: "1px solid var(--turmeric)",
+        borderRadius: "var(--radius-sm)",
+        padding: "10px 12px",
+        color: "var(--turmeric)",
+        fontSize: 13,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      <span>You're offline. You can still view previously loaded data -- logging or saving changes needs a connection.</span>
+    </div>
+  );
+}
+
 export function EmptyState({ eyebrow, title, action }) {
   return (
     <div className="empty-state">

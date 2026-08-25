@@ -40,9 +40,9 @@ class GenerateReportView(APIView):
     Body (optional): {"period_days": 7, "report_type": "short"}
     Triggers on-demand generation for the last `period_days` days
     (defaults to the user's ProgressReportSettings.day_interval).
-    This replaces the original thesis's Celery-scheduled midnight job
-    with an explicit action -- simpler to run/demo without a task queue,
-    while ProgressReportSettings.next_generation_date() is still
+    This uses an explicit action instead of a Celery-scheduled midnight
+    job -- simpler to run/demo without a task queue, while
+    ProgressReportSettings.next_generation_date() is still
     available if you want to add scheduling later.
     """
 

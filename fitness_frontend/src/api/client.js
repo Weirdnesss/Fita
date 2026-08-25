@@ -7,16 +7,16 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 const client = axios.create({ baseURL: BASE_URL });
 
 function getTokens() {
-  const raw = localStorage.getItem("primefit_tokens");
+  const raw = localStorage.getItem("fitness_assistant_tokens");
   return raw ? JSON.parse(raw) : null;
 }
 
 function setTokens(tokens) {
-  localStorage.setItem("primefit_tokens", JSON.stringify(tokens));
+  localStorage.setItem("fitness_assistant_tokens", JSON.stringify(tokens));
 }
 
 function clearTokens() {
-  localStorage.removeItem("primefit_tokens");
+  localStorage.removeItem("fitness_assistant_tokens");
 }
 
 client.interceptors.request.use((config) => {
