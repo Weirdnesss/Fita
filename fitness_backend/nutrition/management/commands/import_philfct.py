@@ -128,11 +128,19 @@ class Command(BaseCommand):
                     continue
 
                 local_name = (row.get("Alternate Name") or "").strip()
+                scientific_name = (row.get("Scientific Name") or "").strip()
+                pre_built_search_text = (row.get("Search_Text") or "").strip()
                 ep_pct = (row.get("Edible_Portion_Pct") or "").strip()
+
+                # Combine the CSV's own pre-built search text (already has
+                # normalized name/alt-name/scientific-name variants) with the
+                # raw scientific name, in case it's phrased differently.
+                search_text = " ".join(filter(None, [pre_built_search_text, scientific_name]))
 
                 defaults = {
                     "name": name,
                     "local_name": local_name,
+                    "search_text": search_text,
                     "category": category,
                     "serving_description": "100g",
                     "serving_size_g": 100,

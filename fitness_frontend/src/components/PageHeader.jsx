@@ -1,12 +1,17 @@
 import { useNavigate } from "react-router-dom";
 
-export default function PageHeader({ title, subtitle, back, action }) {
+export default function PageHeader({ title, subtitle, back, backTo, onBack, action }) {
   const navigate = useNavigate();
+  const handleBack = onBack || (() => (backTo ? navigate(backTo) : navigate(-1)));
   return (
     <header style={styles.header}>
       <div style={styles.top}>
         {back && (
-          <button onClick={() => navigate(-1)} style={styles.backBtn} aria-label="Go back">
+          <button
+            onClick={handleBack}
+            style={styles.backBtn}
+            aria-label="Go back"
+          >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M15 18l-6-6 6-6" />
             </svg>

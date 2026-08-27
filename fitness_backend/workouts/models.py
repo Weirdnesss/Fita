@@ -31,6 +31,11 @@ class WorkoutTemplate(models.Model):
         return f"{self.title} ({self.user.email})"
 
 
+class WeightUnit(models.TextChoices):
+    KG = "kg", "kg"
+    LB = "lb", "lb"
+
+
 class TemplateExercise(models.Model):
     """
     One exercise slot inside a template. Stores a denormalized
@@ -49,6 +54,9 @@ class TemplateExercise(models.Model):
     equipment_name = models.CharField(max_length=100, blank=True)
     target_sets = models.PositiveSmallIntegerField(default=3)
     order = models.PositiveSmallIntegerField(default=0)
+    weight_unit = models.CharField(
+        max_length=2, choices=WeightUnit.choices, default=WeightUnit.KG
+    )
 
     class Meta:
         ordering = ["order", "id"]
@@ -66,6 +74,7 @@ class TemplateHistory(models.Model):
     template_title = models.CharField(max_length=150)
     started_at = models.DateTimeField()
     completed_at = models.DateTimeField(auto_now_add=True)
+    note = models.TextField(blank=True, default="")
 
     class Meta:
         ordering = ["-completed_at"]
@@ -96,6 +105,13 @@ class PerformedExercise(models.Model):
     )
     exercise_name = models.CharField(max_length=200)
     sets_data = models.JSONField(default=list)
+    # sets_data weights are always stored in kg, regardless of which
+    # unit the user was viewing/entering in -- weight_unit below is a
+    # snapshot of the display unit at logging time only, so total_volume
+    # math stays correct even if the exercise's unit is changed later.
+    weight_unit = models.CharField(
+        max_length=2, choices=WeightUnit.choices, default=WeightUnit.KG
+    )
     # sets_data example: [{"weight": 40, "reps": 10}, {"weight": 42.5, "reps": 8}]
 
     @property

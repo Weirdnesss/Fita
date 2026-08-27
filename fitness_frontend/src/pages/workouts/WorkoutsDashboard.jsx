@@ -24,7 +24,8 @@ export default function WorkoutsDashboard() {
     }
   }
 
-  async function handleDelete(id) {
+  async function handleDelete(id, title) {
+    if (!window.confirm(`Delete "${title}"? This can't be undone.`)) return;
     try {
       await deleteTemplate(id);
       setTemplates((prev) => prev.filter((t) => t.id !== id));
@@ -33,31 +34,52 @@ export default function WorkoutsDashboard() {
     }
   }
 
-  const mainRoutines = templates?.filter((t) => t.kind === "main") ?? [];
-  const altRoutines = templates?.filter((t) => t.kind === "alternative") ?? [];
-
   return (
     <div className="page">
       <PageHeader title="Workouts" subtitle="Organize your routines" />
       <ErrorBanner message={error} />
 
-      <RoutineSection
-        title="My Routines"
-        routines={mainRoutines}
-        loading={templates === null}
-        onCreate={() => navigate("/workouts/new?kind=main")}
-        onOpen={(id) => navigate(`/workouts/templates/${id}`)}
-        onDelete={handleDelete}
-      />
-
-      <RoutineSection
-        title="Alternative Routines"
-        routines={altRoutines}
-        loading={templates === null}
-        onCreate={() => navigate("/workouts/new?kind=alternative")}
-        onOpen={(id) => navigate(`/workouts/templates/${id}`)}
-        onDelete={handleDelete}
-      />
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <h3>My Routines</h3>
+          <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => navigate("/workouts/new")}>
+            + Create
+          </button>
+        </div>
+        {templates === null && <Loading />}
+        {templates?.length === 0 && <EmptyState title="No templates added yet" />}
+        {templates?.map((r) => (
+          <div key={r.id} className="card" style={{ marginBottom: 10 }}>
+            <div>
+              <p style={{ fontWeight: 600 }}>{r.title}</p>
+              <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{r.exercises.length} exercises</p>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "6px 12px", fontSize: 12 }}
+                onClick={() => navigate(`/workouts/templates/${r.id}`)}
+              >
+                Edit
+              </button>
+              <button
+                className="btn btn-primary"
+                style={{ padding: "6px 12px", fontSize: 12 }}
+                onClick={() => navigate(`/workouts/templates/${r.id}/start`)}
+              >
+                Start
+              </button>
+              <button
+                className="btn-ghost"
+                style={{ background: "none", border: "1px solid var(--border)", color: "var(--chili)", fontSize: 12, padding: "6px 12px", borderRadius: "var(--radius)" }}
+                onClick={() => handleDelete(r.id, r.title)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -76,48 +98,22 @@ export default function WorkoutsDashboard() {
               </div>
               <span className="pill pill-bamboo">{h.duration_minutes} min</span>
             </div>
-            <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
-              <MiniStat label="Exercises" value={h.total_exercises} />
-              <MiniStat label="Sets" value={h.total_sets} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 10 }}>
+              <div style={{ display: "flex", gap: 16 }}>
+                <MiniStat label="Exercises" value={h.total_exercises} />
+                <MiniStat label="Sets" value={h.total_sets} />
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "6px 12px", fontSize: 12 }}
+                onClick={() => navigate(`/workouts/history/${h.id}`)}
+              >
+                View
+              </button>
             </div>
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function RoutineSection({ title, routines, loading, onCreate, onOpen, onDelete }) {
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <h3>{title}</h3>
-        <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={onCreate}>
-          + Create
-        </button>
-      </div>
-      {loading && <Loading />}
-      {!loading && routines.length === 0 && <EmptyState title="No templates added yet" />}
-      {routines.map((r) => (
-        <div key={r.id} className="card card-tab" style={{ marginBottom: 10 }} onClick={() => onOpen(r.id)}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <p style={{ fontWeight: 600 }}>{r.title}</p>
-              <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{r.exercises.length} exercises</p>
-            </div>
-            <button
-              className="btn-ghost"
-              style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 12 }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(r.id);
-              }}
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }

@@ -3,6 +3,8 @@ from django.urls import path
 from .views import (
     AddExerciseToTemplateView,
     ExerciseSearchView,
+    TemplateExerciseDetailView,
+    WorkoutHistoryDetailView,
     WorkoutHistoryView,
     WorkoutTemplateDetailView,
     WorkoutTemplateListCreateView,
@@ -17,5 +19,11 @@ urlpatterns = [
         AddExerciseToTemplateView.as_view(),
         name="template-add-exercise",
     ),
+    path(
+        "templates/<int:template_id>/exercises/<int:exercise_id>/",
+        TemplateExerciseDetailView.as_view(),
+        name="template-exercise-detail",
+    ),
     path("history/", WorkoutHistoryView.as_view(), name="history"),
+    path("history/<int:pk>/", WorkoutHistoryDetailView.as_view(), name="history-detail"),
 ]

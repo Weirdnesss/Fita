@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
-import { createTemplate, getTemplate, addExerciseToTemplate, searchExercises } from "../../api/workouts";
+import { createTemplate, getTemplate, updateTemplate, addExerciseToTemplate, removeExerciseFromTemplate, updateTemplateExercise, searchExercises } from "../../api/workouts";
 
 export default function TemplateEditor() {
   const { id } = useParams();
@@ -11,6 +11,7 @@ export default function TemplateEditor() {
 
   const [template, setTemplate] = useState(null);
   const [title, setTitle] = useState("New Template");
+  const [kind] = useState(searchParams.get("kind") || "main");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -22,25 +23,114 @@ export default function TemplateEditor() {
         setTitle(t.title);
       }).catch((err) => setError(extractErrorMessage(err)));
     } else {
-      // Create the shell immediately so exercises can be added right away.
-      createTemplate({ title: "New Template", kind: searchParams.get("kind") || "main" })
-        .then((t) => {
-          setTemplate(t);
-          navigate(`/workouts/templates/${t.id}`, { replace: true });
-        })
-        .catch((err) => setError(extractErrorMessage(err)));
+      // Draft mode: nothing is persisted yet. The row is only created
+      // once the user actually adds an exercise or hits Save, so
+      // navigating away from an untouched "new template" leaves no
+      // orphaned rows behind.
+      setTemplate({ id: null, title: "New Template", kind, exercises: [] });
     }
   }, [id]);
+
+  // Creates the template on the server the first time it's needed
+  // (adding an exercise, or hitting Save), and reuses the existing id
+  // on every call after that. Returns the persisted template. Falls
+  // back to "New Template" if the title is blank/whitespace-only --
+  // an empty title shouldn't block the core action of adding an
+  // exercise; the user can always rename it afterward.
+  async function ensureTemplatePersisted() {
+    if (template.id) return template;
+    const effectiveTitle = title.trim() || "New Template";
+    const created = await createTemplate({ title: effectiveTitle, kind });
+    setTemplate(created);
+    setTitle(created.title);
+    navigate(`/workouts/templates/${created.id}`, { replace: true });
+    return created;
+  }
 
   async function handleExerciseAdded(updatedTemplate) {
     setTemplate(updatedTemplate);
     setShowSearch(false);
   }
 
+  async function handleRemoveExercise(exerciseId, exerciseName) {
+    if (!window.confirm(`Remove "${exerciseName}" from this routine?`)) return;
+    try {
+      const updated = await removeExerciseFromTemplate(template.id, exerciseId);
+      setTemplate(updated);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't remove that exercise."));
+    }
+  }
+
+  async function handleTargetSetsChange(exerciseId, newTargetSets) {
+    if (newTargetSets < 1) return;
+    // Optimistic update so the stepper feels instant.
+    setTemplate((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((ex) =>
+        ex.id === exerciseId ? { ...ex, target_sets: newTargetSets } : ex
+      ),
+    }));
+    try {
+      await updateTemplateExercise(template.id, exerciseId, { targetSets: newTargetSets });
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't update target sets."));
+      // Roll back on failure by re-fetching the template's real state.
+      getTemplate(template.id).then(setTemplate).catch(() => {});
+    }
+  }
+
+  async function handleWeightUnitChange(exerciseId, newUnit) {
+    setTemplate((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((ex) =>
+        ex.id === exerciseId ? { ...ex, weight_unit: newUnit } : ex
+      ),
+    }));
+    try {
+      await updateTemplateExercise(template.id, exerciseId, { weightUnit: newUnit });
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't update weight unit."));
+      getTemplate(template.id).then(setTemplate).catch(() => {});
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    const effectiveTitle = title.trim() || "New Template";
+    try {
+      if (template.id) {
+        await updateTemplate(template.id, { title: effectiveTitle });
+      } else {
+        await createTemplate({ title: effectiveTitle, kind });
+      }
+      navigate("/workouts");
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't save. Check your connection."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleBack() {
+    // Every field except the title saves immediately on change (add/remove
+    // exercise, target sets, weight unit), so leaving never loses those.
+    // The title is the one exception -- it's only local state until Save
+    // is clicked -- so only warn when there's an actual unsaved rename on
+    // an already-persisted template. A never-saved draft has nothing to
+    // lose by design (see the draft-mode comment above).
+    const hasUnsavedTitle = template.id && title.trim() && title.trim() !== template.title;
+    if (hasUnsavedTitle && !window.confirm("Discard the unsaved routine name change?")) {
+      return;
+    }
+    navigate("/workouts");
+  }
+
   if (!template) {
     return (
       <div className="page">
-        <PageHeader title="Loading" back />
+        <PageHeader title="Loading" back backTo="/workouts" />
         <ErrorBanner message={error} />
         {!error && <Loading />}
       </div>
@@ -52,7 +142,8 @@ export default function TemplateEditor() {
       <ExerciseSearch
         onAdd={async (wgerExerciseId) => {
           try {
-            const updated = await addExerciseToTemplate(template.id, { wgerExerciseId });
+            const persisted = await ensureTemplatePersisted();
+            const updated = await addExerciseToTemplate(persisted.id, { wgerExerciseId });
             handleExerciseAdded(updated);
           } catch (err) {
             setError(extractErrorMessage(err, "Couldn't add that exercise. Check your connection."));
@@ -68,10 +159,11 @@ export default function TemplateEditor() {
       <PageHeader
         title="Edit Routine"
         back
+        onBack={handleBack}
         action={
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => navigate("/workouts")}>
-              Save
+            <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleSave} disabled={saving}>
+              {saving ? "Saving..." : "Save"}
             </button>
             {template.exercises.length > 0 && (
               <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => navigate(`/workouts/templates/${template.id}/start`)}>
@@ -98,11 +190,80 @@ export default function TemplateEditor() {
         )}
         {template.exercises.map((ex) => (
           <div key={ex.id} className="card" style={{ marginBottom: 10 }}>
-            <p style={{ fontWeight: 600 }}>{ex.exercise_name}</p>
-            <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-              {ex.category_name} {ex.equipment_name ? `· ${ex.equipment_name}` : ""}
-            </p>
-            <p style={{ fontSize: 13, marginTop: 6 }}>{ex.target_sets} target sets</p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <p style={{ fontWeight: 600 }}>{ex.exercise_name}</p>
+                <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                  {ex.category_name} {ex.equipment_name ? `· ${ex.equipment_name}` : ""}
+                </p>
+              </div>
+              <button
+                className="btn-ghost"
+                style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 12 }}
+                onClick={() => handleRemoveExercise(ex.id, ex.exercise_name)}
+              >
+                Remove
+              </button>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 13, color: "var(--text-dim)" }}>Target sets</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button
+                    aria-label="Decrease target sets"
+                    onClick={() => handleTargetSetsChange(ex.id, ex.target_sets - 1)}
+                    disabled={ex.target_sets <= 1}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      border: "1px solid var(--border)",
+                      background: "transparent",
+                      color: ex.target_sets <= 1 ? "var(--text-faint)" : "var(--text-dim)",
+                    }}
+                  >
+                    −
+                  </button>
+                  <span className="stat" style={{ fontSize: 15, minWidth: 18, textAlign: "center" }}>
+                    {ex.target_sets}
+                  </span>
+                  <button
+                    aria-label="Increase target sets"
+                    onClick={() => handleTargetSetsChange(ex.id, ex.target_sets + 1)}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      border: "1px solid var(--border)",
+                      background: "transparent",
+                      color: "var(--text-dim)",
+                    }}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
+                {["kg", "lb"].map((unit) => (
+                  <button
+                    key={unit}
+                    onClick={() => handleWeightUnitChange(ex.id, unit)}
+                    aria-pressed={ex.weight_unit === unit}
+                    style={{
+                      padding: "6px 12px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      border: "none",
+                      background: ex.weight_unit === unit ? "var(--bamboo)" : "transparent",
+                      color: ex.weight_unit === unit ? "#fff" : "var(--text-dim)",
+                    }}
+                  >
+                    {unit}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         ))}
         <button className="btn btn-secondary btn-block" onClick={() => setShowSearch(true)}>

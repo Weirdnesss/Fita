@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { searchFoods, logFood } from "../../api/nutrition";
@@ -11,10 +11,37 @@ const MEALS = [
   ["snack", "Snack"],
 ];
 
+// Mirrors nutrition.views.MAX_SERVINGS on the backend.
+const MAX_SERVINGS = 50;
+
+// Mirrors nutrition.models.FoodCategory on the backend.
+const CATEGORIES = [
+  ["rice_grains", "Rice & Grains"],
+  ["roots_tubers", "Roots & Tubers"],
+  ["nuts_legumes", "Nuts & Legumes"],
+  ["viands_meat", "Meat & Poultry"],
+  ["viands_fish", "Fish & Seafood"],
+  ["eggs", "Eggs"],
+  ["dairy", "Dairy"],
+  ["fats_oils", "Fats & Oils"],
+  ["vegetables", "Vegetables"],
+  ["fruits", "Fruits"],
+  ["soups", "Soups & Stews"],
+  ["snacks", "Snacks & Merienda"],
+  ["desserts", "Desserts & Sweets"],
+  ["beverages", "Beverages"],
+  ["condiments", "Condiments & Sauces"],
+  ["other", "Other"],
+];
+
 export default function FoodSearch() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const logDate = location.state?.date; // undefined -> backend defaults to today
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState(null);
   const [results, setResults] = useState([]);
+  const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState(null);
@@ -23,8 +50,9 @@ export default function FoodSearch() {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const r = await searchFoods(query);
-        setResults(r);
+        const r = await searchFoods(query, category);
+        setResults(r.results);
+        setCount(r.count);
       } catch (err) {
         setError(extractErrorMessage(err));
       } finally {
@@ -32,32 +60,58 @@ export default function FoodSearch() {
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, category]);
 
   if (selected) {
-    return <FoodDetail food={selected} onBack={() => setSelected(null)} onLogged={() => navigate("/nutrition")} />;
+    return (
+      <FoodDetail
+        food={selected}
+        logDate={logDate}
+        onBack={() => setSelected(null)}
+        onLogged={() => navigate("/nutrition")}
+      />
+    );
   }
 
   return (
     <div className="page">
       <PageHeader title="Add Food" back />
       <input autoFocus placeholder="Search for a food (e.g. adobo, rice)" value={query} onChange={(e) => setQuery(e.target.value)} />
-      {query.trim().length === 0 && (
-        <p style={{ fontSize: 13, color: "var(--text-faint)" }}>Try "rice", "adobo", "lumpia"...</p>
-      )}
+
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+        <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
+        {CATEGORIES.map(([value, label]) => (
+          <CategoryChip key={value} active={category === value} label={label} onClick={() => setCategory(category === value ? null : value)} />
+        ))}
+      </div>
+
       {loading && <Loading />}
       <ErrorBanner message={error} />
-      {!loading && query.trim().length > 0 && results.length === 0 && (
-        <p style={{ fontSize: 13, color: "var(--text-faint)" }}>No results for "{query}".</p>
+      {!loading && query.trim().length === 0 && category === null && (
+        <p style={{ fontSize: 13, color: "var(--text-faint)" }}>Try "rice", "adobo", "lumpia", or pick a category above.</p>
+      )}
+      {!loading && results.length === 0 && (query.trim().length > 0 || category !== null) && (
+        <p style={{ fontSize: 13, color: "var(--text-faint)" }}>No results{query.trim() && ` for "${query}"`}.</p>
+      )}
+      {!loading && results.length > 0 && count > results.length && (
+        <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+          Showing {results.length} of {count} -- narrow your search to see more.
+        </p>
       )}
       {results.map((food) => (
         <div key={food.id} className="card" style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => setSelected(food)}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
             <div>
               <p style={{ fontWeight: 600 }}>{food.name}</p>
-              <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{food.serving_description}</p>
+              <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                {food.local_name ? `${food.local_name} · ` : ""}
+                {food.serving_description}
+              </p>
             </div>
-            <span className="stat" style={{ fontSize: 14 }}>{Math.round(food.calories)} kcal</span>
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <span className="stat" style={{ fontSize: 14, display: "block" }}>{Math.round(food.calories)} kcal</span>
+              <VerifiedBadge isVerified={food.is_verified} />
+            </div>
           </div>
         </div>
       ))}
@@ -65,17 +119,51 @@ export default function FoodSearch() {
   );
 }
 
-function FoodDetail({ food, onBack, onLogged }) {
-  const [servings, setServings] = useState(1);
+function CategoryChip({ active, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={active ? "btn btn-primary" : "btn btn-secondary"}
+      style={{ padding: "6px 12px", fontSize: 12, whiteSpace: "nowrap", flexShrink: 0, height: "auto" }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function VerifiedBadge({ isVerified }) {
+  return (
+    <span className={`pill ${isVerified ? "pill-bamboo" : "pill-turmeric"}`} style={{ marginTop: 4 }}>
+      {isVerified ? "PhilFCT" : "Estimated"}
+    </span>
+  );
+}
+
+function FoodDetail({ food, logDate, onBack, onLogged }) {
+  // PhilFCT items are stored per-100g -- let people type grams directly
+  // instead of doing "1.5 servings of 100g" math in their head. Estimated
+  // dishes keep their real serving unit (e.g. "1 cup") as-is.
+  const isGramBased = food.serving_description === "100g";
+
+  const [amount, setAmount] = useState(isGramBased ? 100 : 1);
   const [mealType, setMealType] = useState("breakfast");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const servings = isGramBased ? Number(amount) / food.serving_size_g : Number(amount);
+  const servingsInvalid = !Number.isFinite(servings) || servings <= 0 || servings > MAX_SERVINGS;
+  const validationMessage = servingsInvalid
+    ? Number(amount) > (isGramBased ? MAX_SERVINGS * food.serving_size_g : MAX_SERVINGS)
+      ? `That's more than this form supports in one entry -- log it in smaller amounts.`
+      : `Enter an amount greater than 0.`
+    : "";
+
   async function handleAdd() {
+    if (servingsInvalid) return;
     setSaving(true);
     setError("");
     try {
-      await logFood({ foodItemId: food.id, mealType, servings: Number(servings) });
+      await logFood({ foodItemId: food.id, mealType, servings, date: logDate });
       onLogged();
     } catch (err) {
       setError(extractErrorMessage(err));
@@ -86,7 +174,20 @@ function FoodDetail({ food, onBack, onLogged }) {
 
   return (
     <div className="page">
-      <PageHeader title={food.name} back={false} action={<button className="btn-ghost" style={{ background: "none", border: "none" }} onClick={onBack}>Back to Search</button>} />
+      <PageHeader
+        title={food.name}
+        subtitle={food.local_name || undefined}
+        back={false}
+        action={<button className="btn-ghost" style={{ background: "none", border: "none" }} onClick={onBack}>Back to Search</button>}
+      />
+
+      {logDate && (
+        <p style={{ fontSize: 12, color: "var(--turmeric)" }}>
+          Logging to {new Date(logDate + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}, not today.
+        </p>
+      )}
+
+      <VerifiedBadge isVerified={food.is_verified} />
 
       <div className="card">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, textAlign: "center" }}>
@@ -98,8 +199,18 @@ function FoodDetail({ food, onBack, onLogged }) {
       </div>
 
       <div>
-        <label>Servings ({food.serving_description} each)</label>
-        <input type="number" step="0.25" min="0.25" value={servings} onChange={(e) => setServings(e.target.value)} />
+        <label>{isGramBased ? "Amount (g)" : `Servings (${food.serving_description} each)`}</label>
+        <input
+          type="number"
+          step={isGramBased ? 10 : 0.25}
+          min={isGramBased ? 5 : 0.25}
+          max={isGramBased ? MAX_SERVINGS * food.serving_size_g : MAX_SERVINGS}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+        {validationMessage && (
+          <p style={{ fontSize: 12, color: "var(--chili)", marginTop: 4 }}>{validationMessage}</p>
+        )}
       </div>
 
       <div>
@@ -110,7 +221,7 @@ function FoodDetail({ food, onBack, onLogged }) {
       </div>
 
       <ErrorBanner message={error} />
-      <button className="btn btn-primary btn-block" onClick={handleAdd} disabled={saving}>
+      <button className="btn btn-primary btn-block" onClick={handleAdd} disabled={saving || servingsInvalid}>
         {saving ? "Adding..." : "Add Food"}
       </button>
     </div>

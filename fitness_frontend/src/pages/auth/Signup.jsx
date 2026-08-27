@@ -49,6 +49,7 @@ export default function Signup() {
     password: "",
     confirmPassword: "",
     gender: "",
+    dateOfBirth: "",
     activityLevel: "",
     currentWeightKg: "",
     goalWeightKg: "",
@@ -92,6 +93,7 @@ export default function Signup() {
     try {
       await updateProfile({
         gender: form.gender,
+        date_of_birth: form.dateOfBirth,
         activity_level: form.activityLevel,
         current_weight_kg: form.currentWeightKg ? Number(form.currentWeightKg) : null,
         goal_weight_kg: form.goalWeightKg ? Number(form.goalWeightKg) : null,
@@ -130,7 +132,7 @@ export default function Signup() {
     <div className="page" style={{ gap: 20 }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: "var(--chili)" }}>
-          FITNESS ASSISTANT
+          PRIMEFIT
         </div>
         <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 4 }}>Step {step} of 3</p>
       </div>
@@ -183,39 +185,45 @@ export default function Signup() {
               </select>
             </div>
             <div>
+              <label>Date of birth</label>
+              <input type="date" required max={new Date().toISOString().split("T")[0]} value={form.dateOfBirth} onChange={set("dateOfBirth")} />
+            </div>
+          </div>
+          <div style={row2}>
+            <div>
               <label>Activity level</label>
               <select required value={form.activityLevel} onChange={set("activityLevel")}>
                 <option value="">Select</option>
                 {ACTIVITY_LEVELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
-          </div>
-          <div style={row2}>
             <div>
               <label>Current weight (kg)</label>
               <input type="number" step="0.1" required value={form.currentWeightKg} onChange={set("currentWeightKg")} />
             </div>
+          </div>
+          <div style={row2}>
             <div>
               <label>Goal weight (kg)</label>
               <input type="number" step="0.1" required value={form.goalWeightKg} onChange={set("goalWeightKg")} />
             </div>
-          </div>
-          <div style={row2}>
             <div>
               <label>Height (ft)</label>
               <input type="number" required value={form.heightFt} onChange={set("heightFt")} />
             </div>
+          </div>
+          <div style={row2}>
             <div>
               <label>Height (in)</label>
               <input type="number" required value={form.heightIn} onChange={set("heightIn")} />
             </div>
-          </div>
-          <div>
-            <label>Primary goal</label>
-            <select required value={form.primaryGoal} onChange={set("primaryGoal")}>
-              <option value="">Select</option>
-              {GOALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            <div>
+              <label>Primary goal</label>
+              <select required value={form.primaryGoal} onChange={set("primaryGoal")}>
+                <option value="">Select</option>
+                {GOALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
           </div>
           <ErrorBanner message={error} />
           <div style={row2}>

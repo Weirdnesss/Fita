@@ -10,9 +10,11 @@ import ProfilePage from "./pages/ProfilePage";
 import WorkoutsDashboard from "./pages/workouts/WorkoutsDashboard";
 import TemplateEditor from "./pages/workouts/TemplateEditor";
 import ActiveWorkout from "./pages/workouts/ActiveWorkout";
+import HistoryDetail from "./pages/workouts/HistoryDetail";
 
 import NutritionDashboard from "./pages/nutrition/NutritionDashboard";
 import FoodSearch from "./pages/nutrition/FoodSearch";
+import NutritionSettings from "./pages/nutrition/NutritionSettings";
 
 import ChatList from "./pages/coach/ChatList";
 import ChatDetail from "./pages/coach/ChatDetail";
@@ -42,9 +44,11 @@ export default function App() {
             <Route path="/workouts/new" element={<TemplateEditor />} />
             <Route path="/workouts/templates/:id" element={<TemplateEditor />} />
             <Route path="/workouts/templates/:id/start" element={<ActiveWorkout />} />
+            <Route path="/workouts/history/:id" element={<HistoryDetail />} />
 
             <Route path="/nutrition" element={<NutritionDashboard />} />
             <Route path="/nutrition/search" element={<FoodSearch />} />
+            <Route path="/nutrition/settings" element={<NutritionSettings />} />
 
             <Route path="/coach" element={<ChatList />} />
             <Route path="/coach/:id" element={<ChatDetail />} />

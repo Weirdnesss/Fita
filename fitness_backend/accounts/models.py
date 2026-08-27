@@ -93,6 +93,9 @@ class Profile(models.Model):
 
     # Step 2 - Basic Information
     gender = models.CharField(max_length=20, choices=Gender.choices, blank=True)
+    date_of_birth = models.DateField(
+        null=True, blank=True, help_text="Used to calculate age for calorie/macro goal suggestions"
+    )
     activity_level = models.CharField(
         max_length=20, choices=ActivityLevel.choices, blank=True
     )
@@ -135,6 +138,19 @@ class Profile(models.Model):
             return None
         total_inches = (self.height_ft * 12) + (self.height_in or 0)
         return round(total_inches * 2.54, 1)
+
+    @property
+    def age(self):
+        if self.date_of_birth is None:
+            return None
+        from datetime import date
+
+        today = date.today()
+        years = today.year - self.date_of_birth.year
+        # Subtract 1 if this year's birthday hasn't happened yet.
+        if (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day):
+            years -= 1
+        return years
 
     @property
     def bmi(self):

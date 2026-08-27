@@ -36,6 +36,10 @@ class FoodItem(models.Model):
     local_name = models.CharField(
         max_length=200, blank=True, help_text="Filipino/regional name if different"
     )
+    search_text = models.TextField(
+        blank=True,
+        help_text="Extra searchable terms (scientific name, alt spellings) not shown in the UI",
+    )
     category = models.CharField(max_length=20, choices=FoodCategory.choices)
 
     serving_description = models.CharField(

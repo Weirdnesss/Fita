@@ -4,11 +4,18 @@ export async function searchFoods(query, category) {
   const { data } = await client.get("/nutrition/foods/search/", {
     params: { q: query, category },
   });
-  return data;
+  return data; // { count, results }
 }
 
 export async function getNutritionProfile() {
   const { data } = await client.get("/nutrition/profile/");
+  return data;
+}
+
+export async function getSuggestedGoals() {
+  // Throws with err.response.status === 422 and err.response.data.missing_fields
+  // if the accounts Profile doesn't have weight/height/age/gender yet.
+  const { data } = await client.get("/nutrition/goals/suggested/");
   return data;
 }
 
@@ -29,6 +36,14 @@ export async function logFood({ foodItemId, mealType, servings, date }) {
     servings,
     date,
   });
+  return data;
+}
+
+export async function updateFoodEntry(id, { mealType, servings }) {
+  const payload = {};
+  if (mealType !== undefined) payload.meal_type = mealType;
+  if (servings !== undefined) payload.servings = servings;
+  const { data } = await client.patch(`/nutrition/entries/${id}/`, payload);
   return data;
 }
 

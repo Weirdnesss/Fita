@@ -57,6 +57,8 @@ class DataCollectionService:
                 f"{session.total_exercises} exercises, {session.total_sets} sets, "
                 f"{session.duration_minutes} min"
             )
+            if session.note:
+                lines.append(f"  Note: {session.note}")
         return "\n".join(lines)
 
     def get_recent_nutrition_summary(self, days=7):
@@ -176,6 +178,15 @@ class DataCollectionService:
             for pe in h.performed_exercises.all():
                 unique_exercises.add(pe.exercise_name)
 
+        # Notes are kept separate from the numeric fields above: the
+        # RuleBasedAnalyzer only reads the numeric/aggregate fields (it
+        # has no rule that understands free text), but this whole dict
+        # is also handed to the LLM narrator as JSON context, and the
+        # narrator can use notes the same way the coach chat does.
+        workout_notes = [
+            f"{h.completed_at:%Y-%m-%d}: {h.note}" for h in history if h.note
+        ]
+
         return {
             "has_data": True,
             "total_workouts": total_workouts,
@@ -186,4 +197,5 @@ class DataCollectionService:
             "workouts_per_week": workouts_per_week,
             "exercise_variety": len(unique_exercises),
             "period_days": period_days,
+            "workout_notes": workout_notes,
         }
