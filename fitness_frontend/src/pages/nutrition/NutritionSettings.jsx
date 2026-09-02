@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
+import { useToast } from "../../context/ToastContext";
 import { getNutritionProfile, updateNutritionProfile, getSuggestedGoals } from "../../api/nutrition";
 import { updateProfile } from "../../api/accounts";
 
@@ -25,6 +26,7 @@ const MISSING_FIELD_CONFIG = {
 
 export default function NutritionSettings() {
   const navigate = useNavigate();
+  const showToast = useToast();
   const [goals, setGoals] = useState(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -111,6 +113,7 @@ export default function NutritionSettings() {
         daily_fat_goal: Number(goals.daily_fat_goal),
       });
       setGoals(updated);
+      showToast("Nutrition goals saved", "success");
       navigate("/nutrition");
     } catch (err) {
       setError(extractErrorMessage(err));

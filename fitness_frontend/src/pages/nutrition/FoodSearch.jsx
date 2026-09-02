@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
+import { useToast } from "../../context/ToastContext";
 import { searchFoods, logFood } from "../../api/nutrition";
 
 const MEALS = [
@@ -140,6 +141,7 @@ function VerifiedBadge({ isVerified }) {
 }
 
 function FoodDetail({ food, logDate, onBack, onLogged }) {
+  const showToast = useToast();
   // PhilFCT items are stored per-100g -- let people type grams directly
   // instead of doing "1.5 servings of 100g" math in their head. Estimated
   // dishes keep their real serving unit (e.g. "1 cup") as-is.
@@ -164,6 +166,8 @@ function FoodDetail({ food, logDate, onBack, onLogged }) {
     setError("");
     try {
       await logFood({ foodItemId: food.id, mealType, servings, date: logDate });
+      const mealLabel = MEALS.find(([v]) => v === mealType)?.[1] || mealType;
+      showToast(`Added ${food.name} to ${mealLabel}`, "success");
       onLogged();
     } catch (err) {
       setError(extractErrorMessage(err));

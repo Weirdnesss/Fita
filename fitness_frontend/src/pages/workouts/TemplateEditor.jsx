@@ -154,6 +154,41 @@ export default function TemplateEditor() {
     );
   }
 
+  if (template.is_generated) {
+    // Generated routines are regenerated in place from the Workouts
+    // dashboard, not edited here -- the dashboard already hides the
+    // Edit button for these, but this read-only view is the backstop
+    // if someone lands here directly (a bookmarked/typed URL, back
+    // button after deletion, etc.), matching the same guard the
+    // backend enforces on every mutation for a generated template.
+    return (
+      <div className="page">
+        <PageHeader
+          title={template.title}
+          back
+          backTo="/workouts"
+          action={
+            <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => navigate(`/workouts/templates/${template.id}/start`)}>
+              Start
+            </button>
+          }
+        />
+        <p style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 16 }}>
+          Generated routines can't be edited directly. Delete it from the dashboard and tap Generate again for a new one.
+        </p>
+        {template.exercises.map((ex) => (
+          <div key={ex.id} className="card" style={{ marginBottom: 10 }}>
+            <p style={{ fontWeight: 600 }}>{ex.exercise_name}</p>
+            <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+              {ex.category_name} {ex.equipment_name ? `· ${ex.equipment_name}` : ""}
+            </p>
+            <p style={{ fontSize: 13, marginTop: 6 }}>{ex.target_sets} target sets · {ex.weight_unit}</p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       <PageHeader

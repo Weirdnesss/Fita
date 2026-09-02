@@ -7,11 +7,26 @@ class TemplateKind(models.TextChoices):
     ALTERNATIVE = "alternative", "Alternative Routine"
 
 
+class DayType(models.TextChoices):
+    FULL_BODY = "full_body", "Full Body"
+    UPPER = "upper", "Upper Body"
+    LOWER = "lower", "Lower Body"
+    PUSH = "push", "Push"
+    PULL = "pull", "Pull"
+    LEGS = "legs", "Legs"
+
+
 class WorkoutTemplate(models.Model):
     """
     A saved routine, e.g. 'Push Day'. Exercises live on this via
     TemplateExercise. 'kind' distinguishes primary vs. alternative
     routines, matching the two sections on the Workouts dashboard.
+
+    is_generated + day_type back the "Generate Workout" button: each
+    generate call regenerates the one template for a given day_type
+    in place (see workouts/services/workout_generator.py) rather than
+    creating a new row every time, and generated templates can't be
+    edited directly (see the is_generated guards in views.py).
     """
 
     user = models.ForeignKey(
@@ -21,11 +36,22 @@ class WorkoutTemplate(models.Model):
     kind = models.CharField(
         max_length=15, choices=TemplateKind.choices, default=TemplateKind.MAIN
     )
+    is_generated = models.BooleanField(default=False)
+    day_type = models.CharField(
+        max_length=20, choices=DayType.choices, blank=True, default=""
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "day_type"],
+                condition=models.Q(is_generated=True),
+                name="one_generated_template_per_day_type_per_user",
+            )
+        ]
 
     def __str__(self):
         return f"{self.title} ({self.user.email})"

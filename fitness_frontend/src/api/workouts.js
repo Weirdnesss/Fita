@@ -39,6 +39,11 @@ export async function deleteTemplate(id) {
   await client.delete(`/workouts/templates/${id}/`);
 }
 
+export async function generateWorkout() {
+  const { data } = await client.post("/workouts/generate/");
+  return data;
+}
+
 export async function addExerciseToTemplate(templateId, { wgerExerciseId, targetSets = 3 }) {
   const { data } = await client.post(`/workouts/templates/${templateId}/exercises/`, {
     wger_exercise_id: wgerExerciseId,

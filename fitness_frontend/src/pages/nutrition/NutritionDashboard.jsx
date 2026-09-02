@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import { useToast } from "../../context/ToastContext";
 import { getDailyEntry, getNutritionProfile, deleteFoodEntry, updateFoodEntry } from "../../api/nutrition";
 
 const MEALS = [
@@ -21,6 +23,7 @@ const MAX_SERVINGS = 50;
 
 export default function NutritionDashboard() {
   const navigate = useNavigate();
+  const showToast = useToast();
   const [daily, setDaily] = useState(null);
   const [goals, setGoals] = useState(null);
   const [error, setError] = useState("");
@@ -49,13 +52,17 @@ export default function NutritionDashboard() {
     setSelectedDate(toDateStr(d));
   }
 
-  async function handleDeleteEntry(id, foodName) {
-    if (!window.confirm(`Remove "${foodName}" from this log?`)) return;
+  const [pendingDelete, setPendingDelete] = useState(null); // { id, foodName } | null
+
+  async function confirmDelete() {
+    const { id, foodName } = pendingDelete;
+    setPendingDelete(null);
     try {
       await deleteFoodEntry(id);
       load(selectedDate);
+      showToast(`Removed "${foodName}"`, "success");
     } catch (err) {
-      setError(extractErrorMessage(err));
+      showToast(extractErrorMessage(err), "error");
     }
   }
 
@@ -90,6 +97,7 @@ export default function NutritionDashboard() {
       await updateFoodEntry(entry.id, { mealType: editMeal, servings });
       setEditingId(null);
       load(selectedDate);
+      showToast("Entry updated", "success");
     } catch (err) {
       setEditError(extractErrorMessage(err));
     } finally {
@@ -217,7 +225,7 @@ export default function NutritionDashboard() {
                           Edit
                         </button>
                       )}
-                      <button onClick={() => handleDeleteEntry(e.id, e.food_name)} style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12 }}>
+                      <button onClick={() => setPendingDelete({ id: e.id, foodName: e.food_name })} style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12 }}>
                         Remove
                       </button>
                     </div>
@@ -242,6 +250,15 @@ export default function NutritionDashboard() {
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Remove food entry"
+        message={pendingDelete ? `Remove "${pendingDelete.foodName}" from this log?` : ""}
+        confirmLabel="Remove"
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

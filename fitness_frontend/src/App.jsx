@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ToastProvider } from "./context/ToastContext";
 import RequireAuth from "./components/RequireAuth";
 import AppLayout from "./components/AppLayout";
 
@@ -27,40 +28,42 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
+        <ToastProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
 
-          <Route
-            element={
-              <RequireAuth>
-                <AppLayout />
-              </RequireAuth>
-            }
-          >
-            <Route path="/profile" element={<ProfilePage />} />
+            <Route
+              element={
+                <RequireAuth>
+                  <AppLayout />
+                </RequireAuth>
+              }
+            >
+              <Route path="/profile" element={<ProfilePage />} />
 
-            <Route path="/workouts" element={<WorkoutsDashboard />} />
-            <Route path="/workouts/new" element={<TemplateEditor />} />
-            <Route path="/workouts/templates/:id" element={<TemplateEditor />} />
-            <Route path="/workouts/templates/:id/start" element={<ActiveWorkout />} />
-            <Route path="/workouts/history/:id" element={<HistoryDetail />} />
+              <Route path="/workouts" element={<WorkoutsDashboard />} />
+              <Route path="/workouts/new" element={<TemplateEditor />} />
+              <Route path="/workouts/templates/:id" element={<TemplateEditor />} />
+              <Route path="/workouts/templates/:id/start" element={<ActiveWorkout />} />
+              <Route path="/workouts/history/:id" element={<HistoryDetail />} />
 
-            <Route path="/nutrition" element={<NutritionDashboard />} />
-            <Route path="/nutrition/search" element={<FoodSearch />} />
-            <Route path="/nutrition/settings" element={<NutritionSettings />} />
+              <Route path="/nutrition" element={<NutritionDashboard />} />
+              <Route path="/nutrition/search" element={<FoodSearch />} />
+              <Route path="/nutrition/settings" element={<NutritionSettings />} />
 
-            <Route path="/coach" element={<ChatList />} />
-            <Route path="/coach/:id" element={<ChatDetail />} />
+              <Route path="/coach" element={<ChatList />} />
+              <Route path="/coach/:id" element={<ChatDetail />} />
 
-            <Route path="/progress" element={<ReportsList />} />
-            <Route path="/progress/settings" element={<ReportSettings />} />
-            <Route path="/progress/:id" element={<ReportDetail />} />
-          </Route>
+              <Route path="/progress" element={<ReportsList />} />
+              <Route path="/progress/settings" element={<ReportSettings />} />
+              <Route path="/progress/:id" element={<ReportDetail />} />
+            </Route>
 
-          <Route path="/" element={<Navigate to="/profile" replace />} />
-          <Route path="*" element={<Navigate to="/profile" replace />} />
-        </Routes>
+            <Route path="/" element={<Navigate to="/profile" replace />} />
+            <Route path="*" element={<Navigate to="/profile" replace />} />
+          </Routes>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

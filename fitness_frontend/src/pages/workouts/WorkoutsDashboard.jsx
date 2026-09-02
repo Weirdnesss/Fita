@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
-import { listTemplates, listHistory, deleteTemplate } from "../../api/workouts";
+import { listTemplates, listHistory, deleteTemplate, generateWorkout } from "../../api/workouts";
 
 export default function WorkoutsDashboard() {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState(null);
   const [history, setHistory] = useState(null);
   const [error, setError] = useState("");
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     load();
@@ -21,6 +22,22 @@ export default function WorkoutsDashboard() {
       setHistory(h);
     } catch (err) {
       setError(extractErrorMessage(err));
+    }
+  }
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setError("");
+    try {
+      await generateWorkout();
+      // Re-fetch rather than patch local state in place: a generate
+      // call can either add a new day-type routine or replace an
+      // existing one, so a full refresh is simplest to keep correct.
+      await load();
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't generate a workout."));
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -39,6 +56,18 @@ export default function WorkoutsDashboard() {
       <PageHeader title="Workouts" subtitle="Organize your routines" />
       <ErrorBanner message={error} />
 
+      <div className="card" style={{ marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <p style={{ fontWeight: 600 }}>Generate a workout</p>
+          <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+            Built from your goal, frequency, and location
+          </p>
+        </div>
+        <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleGenerate} disabled={generating}>
+          {generating ? "Generating..." : "Generate"}
+        </button>
+      </div>
+
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <h3>My Routines</h3>
@@ -50,18 +79,23 @@ export default function WorkoutsDashboard() {
         {templates?.length === 0 && <EmptyState title="No templates added yet" />}
         {templates?.map((r) => (
           <div key={r.id} className="card" style={{ marginBottom: 10 }}>
-            <div>
-              <p style={{ fontWeight: 600 }}>{r.title}</p>
-              <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{r.exercises.length} exercises</p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <p style={{ fontWeight: 600 }}>{r.title}</p>
+                <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{r.exercises.length} exercises</p>
+              </div>
+              {r.is_generated && <span className="pill pill-bamboo">Generated</span>}
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: "6px 12px", fontSize: 12 }}
-                onClick={() => navigate(`/workouts/templates/${r.id}`)}
-              >
-                Edit
-              </button>
+              {!r.is_generated && (
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: "6px 12px", fontSize: 12 }}
+                  onClick={() => navigate(`/workouts/templates/${r.id}`)}
+                >
+                  Edit
+                </button>
+              )}
               <button
                 className="btn btn-primary"
                 style={{ padding: "6px 12px", fontSize: 12 }}

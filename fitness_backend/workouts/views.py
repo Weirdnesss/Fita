@@ -10,6 +10,12 @@ from .serializers import (
     TemplateHistorySerializer,
     WorkoutTemplateSerializer,
 )
+from .services.workout_generator import WorkoutGeneratorError, generate_workout
+
+
+GENERATED_TEMPLATE_ERROR = {
+    "error": "Generated routines can't be edited directly. Delete it and tap Generate again for a new one."
+}
 
 
 class ExerciseSearchView(APIView):
@@ -64,12 +70,22 @@ class WorkoutTemplateListCreateView(generics.ListCreateAPIView):
 
 
 class WorkoutTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """GET/PATCH/DELETE /workouts/templates/<id>/"""
+    """
+    GET/PATCH/DELETE /workouts/templates/<id>/
+    PATCH is blocked for generated templates (is_generated=True) --
+    DELETE is still allowed, since deleting is the intended way to get
+    rid of a generated routine you don't want.
+    """
 
     serializer_class = WorkoutTemplateSerializer
 
     def get_queryset(self):
         return WorkoutTemplate.objects.filter(user=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        if self.get_object().is_generated:
+            return Response(GENERATED_TEMPLATE_ERROR, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
 
 
 class AddExerciseToTemplateView(APIView):
@@ -88,6 +104,8 @@ class AddExerciseToTemplateView(APIView):
         template = get_object_or_404(
             WorkoutTemplate, id=template_id, user=request.user
         )
+        if template.is_generated:
+            return Response(GENERATED_TEMPLATE_ERROR, status=status.HTTP_403_FORBIDDEN)
 
         wger_exercise_id = request.data.get("wger_exercise_id")
         if not wger_exercise_id:
@@ -171,6 +189,8 @@ class TemplateExerciseDetailView(APIView):
 
     def patch(self, request, template_id, exercise_id):
         template, exercise = self.get_exercise(request, template_id, exercise_id)
+        if template.is_generated:
+            return Response(GENERATED_TEMPLATE_ERROR, status=status.HTTP_403_FORBIDDEN)
 
         update_fields = []
 
@@ -211,6 +231,8 @@ class TemplateExerciseDetailView(APIView):
 
     def delete(self, request, template_id, exercise_id):
         template, exercise = self.get_exercise(request, template_id, exercise_id)
+        if template.is_generated:
+            return Response(GENERATED_TEMPLATE_ERROR, status=status.HTTP_403_FORBIDDEN)
         exercise.delete()
 
         remaining = template.exercises.order_by("order", "id")
@@ -269,3 +291,20 @@ class WorkoutHistoryDetailView(generics.RetrieveAPIView):
 
     def get_queryset(self):
         return TemplateHistory.objects.filter(user=self.request.user)
+
+
+class GenerateWorkoutView(APIView):
+    """
+    POST /workouts/generate/
+    The "Generate Workout" dashboard button. Reads the user's Profile
+    (goal, workout frequency, workout location) and regenerates, in
+    place, whichever day-type is next in their split -- see
+    workouts/services/workout_generator.py for the actual rules.
+    """
+
+    def post(self, request):
+        try:
+            template = generate_workout(request.user)
+        except WorkoutGeneratorError as e:
+            return Response({"error": str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        return Response(WorkoutTemplateSerializer(template).data)

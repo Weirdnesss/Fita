@@ -24,7 +24,8 @@ class WorkoutTemplateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = WorkoutTemplate
-        fields = ["id", "title", "kind", "exercises", "created_at", "updated_at"]
+        fields = ["id", "title", "kind", "is_generated", "day_type", "exercises", "created_at", "updated_at"]
+        read_only_fields = ["is_generated", "day_type"]
 
 
 class PerformedExerciseSerializer(serializers.ModelSerializer):
