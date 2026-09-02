@@ -15,6 +15,14 @@ from .serializers import (
 )
 from .services.report_generation_service import ReportGenerationService
 
+# A short spam guard, NOT the user's day_interval schedule -- day_interval
+# is a preference for how often they *want* a report, and hard-blocking on
+# it would fight the deliberate on-demand design (see GenerateReportView's
+# docstring). This just stops accidental rapid double/triple-clicks from
+# firing multiple real LLM calls and cluttering the report list with
+# near-duplicates of the same window.
+MIN_SECONDS_BETWEEN_GENERATIONS = 60
+
 
 class ProgressReportListView(generics.ListAPIView):
     """GET /progress/reports/  -- "Generated Reports" list."""
@@ -25,8 +33,10 @@ class ProgressReportListView(generics.ListAPIView):
         return ProgressReport.objects.filter(user=self.request.user)
 
 
-class ProgressReportDetailView(generics.RetrieveAPIView):
-    """GET /progress/reports/<id>/  -- full report view."""
+class ProgressReportDetailView(generics.RetrieveDestroyAPIView):
+    """GET /progress/reports/<id>/  -- full report view.
+    DELETE /progress/reports/<id>/ -- remove a report (e.g. cleaning up
+    a failed generation, or one made by mistake)."""
 
     serializer_class = ProgressReportDetailSerializer
 
@@ -52,6 +62,19 @@ class GenerateReportView(APIView):
         data = serializer.validated_data
 
         settings_obj, _ = ProgressReportSettings.objects.get_or_create(user=request.user)
+
+        if settings_obj.last_generated_at:
+            elapsed = (timezone.now() - settings_obj.last_generated_at).total_seconds()
+            if elapsed < MIN_SECONDS_BETWEEN_GENERATIONS:
+                wait_seconds = round(MIN_SECONDS_BETWEEN_GENERATIONS - elapsed)
+                return Response(
+                    {
+                        "error": f"Please wait {wait_seconds}s before generating another report.",
+                        "retry_after_seconds": wait_seconds,
+                    },
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
         period_days = data.get("period_days") or settings_obj.day_interval
         report_type = data.get("report_type") or settings_obj.report_type
 

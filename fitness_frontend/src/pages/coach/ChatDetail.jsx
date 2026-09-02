@@ -33,13 +33,14 @@ export default function ChatDetail() {
     e.preventDefault();
     if (!input.trim() || sending) return;
     const content = input.trim();
+    const tempId = `temp-${Date.now()}`;
     setInput("");
     setError("");
 
     // Optimistic append of the user's message.
     setChat((prev) => ({
       ...prev,
-      messages: [...prev.messages, { id: `temp-${Date.now()}`, role: "user", content }],
+      messages: [...prev.messages, { id: tempId, role: "user", content }],
     }));
     setSending(true);
     try {
@@ -48,18 +49,24 @@ export default function ChatDetail() {
         ...prev,
         title: prev.title === "New Chat" ? content.slice(0, 60) : prev.title,
         messages: [
-          ...prev.messages.filter((m) => !String(m.id).startsWith("temp-")),
+          // Only replace THIS send's temp message -- a previous failed
+          // send may still be sitting in the list (kept, not rolled
+          // back, see the catch block below) and must not be wiped out
+          // by a later unrelated success.
+          ...prev.messages.filter((m) => m.id !== tempId),
           { id: `u-${Date.now()}`, role: "user", content },
           { id: res.message_id, role: "assistant", content: res.assistant_message },
         ],
       }));
     } catch (err) {
       setError(extractErrorMessage(err, "The assistant is unavailable right now -- check your GROQ_API_KEY / connection."));
-      // Roll back the optimistic message on failure.
-      setChat((prev) => ({
-        ...prev,
-        messages: prev.messages.filter((m) => !String(m.id).startsWith("temp-")),
-      }));
+      // Don't roll back the optimistic message: the backend saves the
+      // user's message before attempting the LLM call, so it's genuinely
+      // persisted even though generation failed. Hiding it here would
+      // just make it silently reappear (with no explanation) next time
+      // the chat loads -- instead we leave it visible and let the
+      // "last message has no reply" check below flag it consistently,
+      // both right now and on a future reload.
     } finally {
       setSending(false);
     }
@@ -85,8 +92,13 @@ export default function ChatDetail() {
             <p>Ask about workouts, nutrition, or fitness advice!</p>
           </div>
         )}
-        {chat.messages.map((m) => (
-          <MessageBubble key={m.id} role={m.role} content={m.content} />
+        {chat.messages.map((m, i) => (
+          <MessageBubble
+            key={m.id}
+            role={m.role}
+            content={m.content}
+            noReply={!sending && i === chat.messages.length - 1 && m.role === "user"}
+          />
         ))}
         {sending && <MessageBubble role="assistant" content="..." pending />}
         <div ref={bottomRef} />
@@ -109,10 +121,10 @@ export default function ChatDetail() {
   );
 }
 
-function MessageBubble({ role, content, pending }) {
+function MessageBubble({ role, content, pending, noReply }) {
   const isUser = role === "user";
   return (
-    <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start" }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start" }}>
       <div
         style={{
           maxWidth: "82%",
@@ -128,6 +140,11 @@ function MessageBubble({ role, content, pending }) {
       >
         {content}
       </div>
+      {noReply && (
+        <p style={{ fontSize: 11, color: "var(--chili)", marginTop: 4 }}>
+          Didn't get a response -- send another message to try again.
+        </p>
+      )}
     </div>
   );
 }

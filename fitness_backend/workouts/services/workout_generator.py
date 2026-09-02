@@ -18,6 +18,12 @@ generated template per day-type per user regardless of any bug here.
 primary_goal only steers exercises-per-category and target_sets (not
 rep ranges -- TemplateExercise has no rep-range field), since that's
 all the current data model supports.
+
+experience_level (beginner/intermediate/advanced) adjusts the same
+knobs on top of goal: beginners get a hand-maintained exclude list for
+technical/Olympic-style movements (wger has no difficulty field to
+filter on automatically), a bias toward non-barbell equipment over
+goal's own barbell preference, and a lower target_sets cap.
 """
 
 import random
@@ -25,7 +31,7 @@ import random
 from django.db import transaction
 from django.db.models import Q
 
-from accounts.models import PrimaryGoal, WorkoutFrequency, WorkoutLocation
+from accounts.models import ExperienceLevel, PrimaryGoal, WorkoutFrequency, WorkoutLocation
 from ..models import DayType, TemplateExercise, TemplateKind, WeightUnit, WgerExercise, WorkoutTemplate
 
 
@@ -75,8 +81,24 @@ GOAL_PARAMS = {
 }
 DEFAULT_GOAL_PARAMS = (2, 3, False)
 
+# wger has no per-exercise difficulty field at all, so there's no way
+# to automatically detect "too advanced for a beginner" -- this is a
+# hand-maintained list of technical/coached movements (Olympic lifts
+# and similar) to exclude outright for beginners, matched by name
+# since that's the only signal available.
+BEGINNER_EXCLUDE_KEYWORDS = [
+    "clean and jerk", "clean & jerk", "power clean", "hang clean", "clean",
+    "snatch", "muscle up", "muscle-up", "pistol squat", "kipping",
+]
 
-def _pick_exercises_for_category(category, location, count, prefer_barbell):
+# Cap on target_sets for beginners regardless of goal -- novices
+# progress well on lower volume while they're still learning movement
+# patterns, so even a "build_strength" beginner shouldn't jump
+# straight to 5 sets.
+BEGINNER_MAX_SETS = 3
+
+
+def _pick_exercises_for_category(category, location, count, prefer_barbell, beginner):
     qs = WgerExercise.objects.filter(category_name__iexact=category)
 
     if location == WorkoutLocation.HOME:
@@ -89,10 +111,33 @@ def _pick_exercises_for_category(category, location, count, prefer_barbell):
         qs = home_filtered if home_filtered.exists() else qs
 
     candidates = list(qs)
+
+    if beginner:
+        exclude_q = Q()
+        for keyword in BEGINNER_EXCLUDE_KEYWORDS:
+            exclude_q |= Q(name__icontains=keyword)
+        excluded_names = set(
+            WgerExercise.objects.filter(exclude_q).values_list("name", flat=True)
+        )
+        filtered = [c for c in candidates if c.name not in excluded_names]
+        # Don't let the exclude list wipe out an entire category if
+        # everything available happens to match -- a filtered-but-risky
+        # exercise beats no exercise for that muscle group at all.
+        candidates = filtered if filtered else candidates
+
     if not candidates:
         return []
 
-    if prefer_barbell:
+    # Beginners: actively steer away from barbell free-weight compounds
+    # (harder to learn safely without coaching) regardless of what the
+    # goal would otherwise prefer -- machine/dumbbell/bodyweight first.
+    # Non-beginners: goal's own barbell preference (e.g. build_strength)
+    # applies as designed.
+    if beginner:
+        non_barbell = [c for c in candidates if "barbell" not in c.equipment_name.lower()]
+        if non_barbell:
+            candidates = non_barbell
+    elif prefer_barbell:
         barbell_candidates = [c for c in candidates if "barbell" in c.equipment_name.lower()]
         if barbell_candidates:
             candidates = barbell_candidates
@@ -135,10 +180,17 @@ def generate_workout(user):
     frequency = (profile.workout_frequency if profile else "") or WorkoutFrequency.THREE_TO_FOUR
     location = (profile.workout_location if profile else "") or WorkoutLocation.GYM
     goal = (profile.primary_goal if profile else "") or PrimaryGoal.MAINTAIN_WEIGHT
+    # No experience_level answered defaults to intermediate -- neutral,
+    # same reasoning as the other blank-profile defaults above (not
+    # assuming beginner OR advanced when we don't actually know).
+    experience = (profile.experience_level if profile else "") or ExperienceLevel.INTERMEDIATE
+    beginner = experience == ExperienceLevel.BEGINNER
 
     day_type, existing_template = determine_next_day_type(user, frequency)
     categories = DAY_TYPE_CATEGORIES[day_type]
     count_per_category, target_sets, prefer_barbell = GOAL_PARAMS.get(goal, DEFAULT_GOAL_PARAMS)
+    if beginner:
+        target_sets = min(target_sets, BEGINNER_MAX_SETS)
     title = f"{DAY_TYPE_LABELS[day_type]} (Generated)"
 
     if existing_template:
@@ -157,7 +209,7 @@ def generate_workout(user):
 
     order = 0
     for category in categories:
-        picks = _pick_exercises_for_category(category, location, count_per_category, prefer_barbell)
+        picks = _pick_exercises_for_category(category, location, count_per_category, prefer_barbell, beginner)
         for wger_ex in picks:
             weight_unit = (
                 WeightUnit.LB if "dumbbell" in wger_ex.equipment_name.lower() else WeightUnit.KG

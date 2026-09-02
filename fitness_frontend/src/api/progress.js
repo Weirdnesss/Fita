@@ -10,6 +10,10 @@ export async function getReport(id) {
   return data;
 }
 
+export async function deleteReport(id) {
+  await client.delete(`/progress/reports/${id}/`);
+}
+
 export async function generateReport({ periodDays, reportType } = {}) {
   const { data } = await client.post("/progress/reports/generate/", {
     period_days: periodDays,

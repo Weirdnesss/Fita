@@ -2,17 +2,28 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
-import { listReports, generateReport } from "../../api/progress";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import { useToast } from "../../context/ToastContext";
+import { listReports, generateReport, deleteReport } from "../../api/progress";
 
 export default function ReportsList() {
   const navigate = useNavigate();
+  const showToast = useToast();
   const [reports, setReports] = useState(null);
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [cooldown, setCooldown] = useState(0); // seconds remaining before another generate is allowed
+  const [pendingDelete, setPendingDelete] = useState(null); // report id | null
 
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setInterval(() => setCooldown((c) => Math.max(c - 1, 0)), 1000);
+    return () => clearInterval(t);
+  }, [cooldown]);
 
   function load() {
     listReports().then(setReports).catch((err) => setError(extractErrorMessage(err)));
@@ -29,10 +40,25 @@ export default function ReportsList() {
         navigate(`/progress/${report.id}`);
       }
     } catch (err) {
+      if (err.response?.status === 429) {
+        setCooldown(err.response.data.retry_after_seconds || 60);
+      }
       setError(extractErrorMessage(err, "Couldn't generate a report -- check GROQ_API_KEY and that you have logged data."));
     } finally {
       setGenerating(false);
       load();
+    }
+  }
+
+  async function confirmDeleteReport() {
+    const id = pendingDelete;
+    setPendingDelete(null);
+    try {
+      await deleteReport(id);
+      setReports((rs) => rs.filter((r) => r.id !== id));
+      showToast("Report deleted", "success");
+    } catch (err) {
+      showToast(extractErrorMessage(err), "error");
     }
   }
 
@@ -42,8 +68,8 @@ export default function ReportsList() {
       <ErrorBanner message={error} />
 
       <div style={{ display: "flex", gap: 8 }}>
-        <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleGenerate} disabled={generating}>
-          {generating ? "Generating..." : "Generate New Report"}
+        <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleGenerate} disabled={generating || cooldown > 0}>
+          {generating ? "Generating..." : cooldown > 0 ? `Wait ${cooldown}s` : "Generate New Report"}
         </button>
         <button className="btn btn-secondary" onClick={() => navigate("/progress/settings")}>
           Settings
@@ -56,7 +82,15 @@ export default function ReportsList() {
         <div key={r.id} className="card card-tab" style={{ marginBottom: 10, cursor: "pointer" }} onClick={() => navigate(`/progress/${r.id}`)}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
             <p style={{ fontWeight: 600 }}>Report #{r.id}</p>
-            <StatusPill status={r.status} />
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <StatusPill status={r.status} />
+              <button
+                onClick={(e) => { e.stopPropagation(); setPendingDelete(r.id); }}
+                style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12 }}
+              >
+                Delete
+              </button>
+            </div>
           </div>
           <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 6 }}>
             {r.period_start} - {r.period_end}
@@ -68,6 +102,15 @@ export default function ReportsList() {
           )}
         </div>
       ))}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete report"
+        message={pendingDelete !== null ? `Delete Report #${pendingDelete}? This can't be undone.` : ""}
+        confirmLabel="Delete"
+        onConfirm={confirmDeleteReport}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

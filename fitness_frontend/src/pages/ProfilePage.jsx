@@ -33,6 +33,7 @@ export default function ProfilePage() {
 
       {showSettings && (
         <div className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button className="btn btn-secondary btn-block" onClick={() => navigate("/profile/edit")}>Edit Profile</button>
           <button className="btn btn-secondary btn-block" onClick={handleLogout}>Log Out</button>
         </div>
       )}
@@ -60,6 +61,7 @@ export default function ProfilePage() {
         <DetailRow label="Height" value={profile.height_cm ? `${profile.height_cm} cm` : "--"} />
         <DetailRow label="Workout frequency" value={profile.workout_frequency ? `${profile.workout_frequency} / week` : "--"} />
         <DetailRow label="Workout location" value={formatChoice(profile.workout_location)} />
+        <DetailRow label="Experience level" value={formatChoice(profile.experience_level)} />
         {profile.medical_conditions && <DetailRow label="Medical conditions" value={profile.medical_conditions} />}
         {profile.food_allergies && <DetailRow label="Food allergies" value={profile.food_allergies} />}
       </div>

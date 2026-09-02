@@ -72,6 +72,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "food_allergies",
             "workout_frequency",
             "workout_location",
+            "experience_level",
             "bmi",
             "height_cm",
         ]

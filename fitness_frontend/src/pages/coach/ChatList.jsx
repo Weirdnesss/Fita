@@ -2,13 +2,17 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
-import { listChats, createChat } from "../../api/coach";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import { useToast } from "../../context/ToastContext";
+import { listChats, createChat, deleteChat } from "../../api/coach";
 
 export default function ChatList() {
   const navigate = useNavigate();
+  const showToast = useToast();
   const [chats, setChats] = useState(null);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null); // { id, title } | null
 
   useEffect(() => {
     listChats().then(setChats).catch((err) => setError(extractErrorMessage(err)));
@@ -23,6 +27,18 @@ export default function ChatList() {
       setError(extractErrorMessage(err));
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function confirmDeleteChat() {
+    const { id } = pendingDelete;
+    setPendingDelete(null);
+    try {
+      await deleteChat(id);
+      setChats((cs) => cs.filter((c) => c.id !== id));
+      showToast("Chat deleted", "success");
+    } catch (err) {
+      showToast(extractErrorMessage(err), "error");
     }
   }
 
@@ -45,11 +61,28 @@ export default function ChatList() {
         )}
         {chats?.map((c) => (
           <div key={c.id} className="card card-tab" style={{ marginBottom: 10, cursor: "pointer" }} onClick={() => navigate(`/coach/${c.id}`)}>
-            <p style={{ fontWeight: 600 }}>{c.title}</p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <p style={{ fontWeight: 600 }}>{c.title}</p>
+              <button
+                onClick={(e) => { e.stopPropagation(); setPendingDelete({ id: c.id, title: c.title }); }}
+                style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12 }}
+              >
+                Delete
+              </button>
+            </div>
             <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{new Date(c.updated_at).toLocaleString()}</p>
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Delete chat"
+        message={pendingDelete ? `Delete "${pendingDelete.title}"? This can't be undone.` : ""}
+        confirmLabel="Delete"
+        onConfirm={confirmDeleteChat}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

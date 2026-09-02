@@ -34,9 +34,14 @@ const LOCATIONS = [
   ["home", "Home"],
   ["mixed", "Mixed"],
 ];
+const EXPERIENCE_LEVELS = [
+  ["beginner", "Beginner"],
+  ["intermediate", "Intermediate"],
+  ["advanced", "Advanced"],
+];
 
 export default function Signup() {
-  const { login } = useAuth();
+  const { login, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
@@ -60,6 +65,7 @@ export default function Signup() {
     foodAllergies: "",
     workoutFrequency: "",
     workoutLocation: "",
+    experienceLevel: "",
   });
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -101,6 +107,7 @@ export default function Signup() {
         height_in: form.heightIn ? Number(form.heightIn) : null,
         primary_goal: form.primaryGoal,
       });
+      await refreshUser();
       setStep(3);
     } catch (err) {
       setError(extractErrorMessage(err));
@@ -119,7 +126,9 @@ export default function Signup() {
         food_allergies: form.foodAllergies,
         workout_frequency: form.workoutFrequency,
         workout_location: form.workoutLocation,
+        experience_level: form.experienceLevel,
       });
+      await refreshUser();
       navigate("/profile");
     } catch (err) {
       setError(extractErrorMessage(err));
@@ -132,7 +141,7 @@ export default function Signup() {
     <div className="page" style={{ gap: 20 }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: "var(--chili)" }}>
-          PRIMEFIT
+          FITNESS ASSISTANT
         </div>
         <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 4 }}>Step {step} of 3</p>
       </div>
@@ -256,6 +265,13 @@ export default function Signup() {
             <select required value={form.workoutLocation} onChange={set("workoutLocation")}>
               <option value="">Select</option>
               {LOCATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Experience level</label>
+            <select required value={form.experienceLevel} onChange={set("experienceLevel")}>
+              <option value="">Select</option>
+              {EXPERIENCE_LEVELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
           <ErrorBanner message={error} />

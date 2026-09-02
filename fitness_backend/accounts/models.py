@@ -72,6 +72,10 @@ class WorkoutFrequency(models.TextChoices):
     FIVE_TO_SIX = "5-6", "5-6 Days per week"
     DAILY = "daily", "Daily"
 
+class ExperienceLevel(models.TextChoices):
+    BEGINNER = "beginner", "Beginner"
+    INTERMEDIATE = "intermediate", "Intermediate"
+    ADVANCED = "advanced", "Advanced"
 
 class Gender(models.TextChoices):
     MALE = "male", "Male"
@@ -127,6 +131,10 @@ class Profile(models.Model):
     )
     workout_location = models.CharField(
         max_length=10, choices=WorkoutLocation.choices, blank=True
+    )
+
+    experience_level = models.CharField(
+        max_length=15, choices=ExperienceLevel.choices, blank=True
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
