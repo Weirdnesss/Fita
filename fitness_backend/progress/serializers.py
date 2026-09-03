@@ -31,6 +31,8 @@ class ProgressReportDetailSerializer(serializers.ModelSerializer):
 
 
 class ProgressReportSettingsSerializer(serializers.ModelSerializer):
+    day_interval = serializers.IntegerField(min_value=1, max_value=90)
+
     class Meta:
         model = ProgressReportSettings
         fields = ["day_interval", "report_type", "is_enabled", "last_generated_at"]

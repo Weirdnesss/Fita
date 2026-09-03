@@ -55,6 +55,7 @@ export default function ReportSettings() {
               className="btn btn-secondary"
               style={{ width: 40, height: 40, padding: 0 }}
               onClick={() => setSettings((s) => ({ ...s, day_interval: Math.max(1, s.day_interval - 1) }))}
+              disabled={settings.day_interval <= 1}
             >
               −
             </button>
@@ -65,7 +66,8 @@ export default function ReportSettings() {
             <button
               className="btn btn-secondary"
               style={{ width: 40, height: 40, padding: 0 }}
-              onClick={() => setSettings((s) => ({ ...s, day_interval: s.day_interval + 1 }))}
+              onClick={() => setSettings((s) => ({ ...s, day_interval: Math.min(90, s.day_interval + 1) }))}
+              disabled={settings.day_interval >= 90}
             >
               +
             </button>
@@ -87,6 +89,24 @@ export default function ReportSettings() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ paddingRight: 12 }}>
+            <label style={{ marginBottom: 2 }}>Auto-generate</label>
+            <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+              Reports are currently only generated with the button on the reports
+              page. This just saves your preference for when scheduled generation
+              is added — it doesn't change anything yet.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={settings.is_enabled}
+            className={`switch ${settings.is_enabled ? "on" : ""}`}
+            onClick={() => setSettings((s) => ({ ...s, is_enabled: !s.is_enabled }))}
+          />
         </div>
 
         <ErrorBanner message={error} />
