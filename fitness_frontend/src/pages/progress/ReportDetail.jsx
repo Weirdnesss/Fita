@@ -27,7 +27,11 @@ export default function ReportDetail() {
 
   return (
     <div className="page">
-      <PageHeader title={`Report #${report.id}`} back subtitle={`${report.period_start} - ${report.period_end}`} />
+      <PageHeader
+        title={`Report #${report.report_number}`}
+        back
+        subtitle={`${report.period_start} - ${report.period_end} · ${report.triggered_by === "interval" ? "Interval" : "Manual"}`}
+      />
 
       {report.status === "failed" && (
         <ErrorBanner message={report.generation_error || "This report failed to generate."} />

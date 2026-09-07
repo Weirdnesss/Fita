@@ -14,10 +14,11 @@ export async function deleteReport(id) {
   await client.delete(`/progress/reports/${id}/`);
 }
 
-export async function generateReport({ periodDays, reportType } = {}) {
+export async function generateReport({ periodDays, reportType, triggeredBy = "manual" } = {}) {
   const { data } = await client.post("/progress/reports/generate/", {
     period_days: periodDays,
     report_type: reportType,
+    triggered_by: triggeredBy,
   });
   return data;
 }

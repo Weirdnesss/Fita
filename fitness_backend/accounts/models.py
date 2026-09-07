@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.base_user import BaseUserManager
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
+from django.utils import timezone
 
 
 class AccountManager(BaseUserManager):
@@ -72,11 +73,6 @@ class WorkoutFrequency(models.TextChoices):
     FIVE_TO_SIX = "5-6", "5-6 Days per week"
     DAILY = "daily", "Daily"
 
-class ExperienceLevel(models.TextChoices):
-    BEGINNER = "beginner", "Beginner"
-    INTERMEDIATE = "intermediate", "Intermediate"
-    ADVANCED = "advanced", "Advanced"
-
 class Gender(models.TextChoices):
     MALE = "male", "Male"
     FEMALE = "female", "Female"
@@ -133,10 +129,6 @@ class Profile(models.Model):
         max_length=10, choices=WorkoutLocation.choices, blank=True
     )
 
-    experience_level = models.CharField(
-        max_length=15, choices=ExperienceLevel.choices, blank=True
-    )
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -169,3 +161,40 @@ class Profile(models.Model):
 
     def __str__(self):
         return f"Profile<{self.user.email}>"
+
+
+class WeightLog(models.Model):
+    """
+    A single logged bodyweight entry -- the actual history that was
+    missing before (Profile only ever held one static
+    current_weight_kg value with no record of how it got there).
+    Profile.current_weight_kg is kept in sync to the latest entry
+    whenever one is created/updated/deleted (see the weight-log views),
+    so BMI, the nutrition goal calculator, and the coach's context
+    builder all keep working unchanged -- they just keep reading
+    current_weight_kg and don't need to know logging exists.
+
+    One entry per user per day: logging again the same day updates
+    that day's entry instead of creating a duplicate, since "what did
+    I weigh today" only has one answer.
+    """
+
+    user = models.ForeignKey(
+        Account, on_delete=models.CASCADE, related_name="weight_logs"
+    )
+    weight_kg = models.FloatField(
+        validators=[MinValueValidator(20), MaxValueValidator(300)]
+    )
+    logged_at = models.DateField(default=timezone.localdate)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-logged_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "logged_at"], name="one_weight_log_per_user_per_day"
+            )
+        ]
+
+    def __str__(self):
+        return f"WeightLog<{self.user.email} {self.logged_at} {self.weight_kg}kg>"

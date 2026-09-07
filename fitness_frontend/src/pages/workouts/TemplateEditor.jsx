@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
-import { createTemplate, getTemplate, updateTemplate, addExerciseToTemplate, removeExerciseFromTemplate, updateTemplateExercise, searchExercises } from "../../api/workouts";
+import { createTemplate, getTemplate, updateTemplate, addExerciseToTemplate, removeExerciseFromTemplate, updateTemplateExercise, swapTemplateExercise, searchExercises } from "../../api/workouts";
 
 export default function TemplateEditor() {
   const { id } = useParams();
@@ -15,6 +15,8 @@ export default function TemplateEditor() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [swapTargetId, setSwapTargetId] = useState(null);
+  const [swappingId, setSwappingId] = useState(null);
 
   useEffect(() => {
     if (id) {
@@ -95,6 +97,20 @@ export default function TemplateEditor() {
     }
   }
 
+  async function handleSwapExercise(exerciseId, reason) {
+    setSwappingId(exerciseId);
+    setError("");
+    try {
+      const updated = await swapTemplateExercise(template.id, exerciseId, reason);
+      setTemplate(updated);
+      setSwapTargetId(null);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't find a replacement exercise."));
+    } finally {
+      setSwappingId(null);
+    }
+  }
+
   async function handleSave() {
     setSaving(true);
     setError("");
@@ -161,6 +177,9 @@ export default function TemplateEditor() {
     // if someone lands here directly (a bookmarked/typed URL, back
     // button after deletion, etc.), matching the same guard the
     // backend enforces on every mutation for a generated template.
+    // Swapping a single exercise is the one exception: it's allowed
+    // here even though nothing else is, since it doesn't touch the
+    // weekly Generate cooldown.
     return (
       <div className="page">
         <PageHeader
@@ -174,16 +193,18 @@ export default function TemplateEditor() {
           }
         />
         <p style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 16 }}>
-          Generated routines can't be edited directly. Delete it from the dashboard and tap Generate again for a new one.
+          Generated routines can't be edited directly, but you can swap out a single exercise below if it's too hard, unavailable, or not right for you.
         </p>
+        <ErrorBanner message={error} />
         {template.exercises.map((ex) => (
-          <div key={ex.id} className="card" style={{ marginBottom: 10 }}>
-            <p style={{ fontWeight: 600 }}>{ex.exercise_name}</p>
-            <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-              {ex.category_name} {ex.equipment_name ? `· ${ex.equipment_name}` : ""}
-            </p>
-            <p style={{ fontSize: 13, marginTop: 6 }}>{ex.target_sets} target sets · {ex.weight_unit}</p>
-          </div>
+          <GeneratedExerciseRow
+            key={ex.id}
+            exercise={ex}
+            active={swapTargetId === ex.id}
+            swapping={swappingId === ex.id}
+            onToggle={() => setSwapTargetId(swapTargetId === ex.id ? null : ex.id)}
+            onSwap={(reason) => handleSwapExercise(ex.id, reason)}
+          />
         ))}
       </div>
     );
@@ -305,6 +326,50 @@ export default function TemplateEditor() {
           + Add Exercise
         </button>
       </div>
+    </div>
+  );
+}
+
+function GeneratedExerciseRow({ exercise, active, swapping, onToggle, onSwap }) {
+  const REASONS = [
+    ["too_hard", "Too hard"],
+    ["unavailable", "Not available"],
+    ["wrong", "Not right for me"],
+  ];
+  return (
+    <div className="card" style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <p style={{ fontWeight: 600 }}>{exercise.exercise_name}</p>
+          <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+            {exercise.category_name} {exercise.equipment_name ? `· ${exercise.equipment_name}` : ""}
+          </p>
+        </div>
+        <button
+          className="btn-ghost"
+          style={{ background: "none", border: "1px solid var(--border)", fontSize: 12, padding: "6px 12px", borderRadius: "var(--radius)" }}
+          onClick={onToggle}
+          disabled={swapping}
+        >
+          Swap
+        </button>
+      </div>
+      <p style={{ fontSize: 13, marginTop: 6 }}>{exercise.target_sets} target sets · {exercise.weight_unit}</p>
+      {active && (
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          {REASONS.map(([value, label]) => (
+            <button
+              key={value}
+              className="btn btn-secondary"
+              style={{ padding: "6px 12px", fontSize: 12 }}
+              onClick={() => onSwap(value)}
+              disabled={swapping}
+            >
+              {swapping ? "Swapping..." : label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

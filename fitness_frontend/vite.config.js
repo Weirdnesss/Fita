@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons.svg'],
       manifest: {
-        name: 'PrimeFit',
-        short_name: 'PrimeFit',
+        name: 'Fitness Assistant',
+        short_name: 'Fita',
         description: 'AI-powered fitness assistant, workout tracker, and Filipino nutrition log.',
         theme_color: '#15171b',
         background_color: '#15171b',
@@ -38,7 +38,7 @@ export default defineConfig({
             handler: 'NetworkFirst',
             method: 'GET',
             options: {
-              cacheName: 'primefit-api',
+              cacheName: 'fitness-api',
               networkTimeoutSeconds: 8,
               expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 }, // 1 day
               cacheableResponse: { statuses: [0, 200] },

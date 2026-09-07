@@ -65,6 +65,17 @@ export async function updateTemplateExercise(templateId, exerciseId, { targetSet
   return data;
 }
 
+// reason must be one of "too_hard" | "unavailable" | "wrong" -- see
+// TemplateExerciseSwapView on the backend. Unlike a full regenerate,
+// this isn't limited by the weekly cooldown.
+export async function swapTemplateExercise(templateId, exerciseId, reason) {
+  const { data } = await client.post(
+    `/workouts/templates/${templateId}/exercises/${exerciseId}/swap/`,
+    { reason }
+  );
+  return data;
+}
+
 export async function listHistory() {
   const { data } = await client.get("/workouts/history/");
   return data;

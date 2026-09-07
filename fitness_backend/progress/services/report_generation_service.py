@@ -12,6 +12,8 @@ import json
 import os
 from pathlib import Path
 
+from django.db import transaction
+from django.db.models import Max
 from django.utils import timezone
 from openai import OpenAI
 
@@ -37,14 +39,27 @@ class ReportGenerationService:
         )
         self.model = os.getenv("GROQ_MODEL", DEFAULT_MODEL)
 
-    def generate_report(self, user, period_start, period_end, report_type="short"):
-        report = ProgressReport.objects.create(
-            user=user,
-            period_start=period_start,
-            period_end=period_end,
-            report_type=report_type,
-            status=ReportStatus.PENDING,
-        )
+    def generate_report(self, user, period_start, period_end, report_type="short", triggered_by="manual"):
+        with transaction.atomic():
+            # select_for_update locks this user's existing report rows for
+            # the duration of the transaction, so two near-simultaneous
+            # generate calls for the same user can't both read the same
+            # max and pick the same report_number.
+            last_number = (
+                ProgressReport.objects.select_for_update()
+                .filter(user=user)
+                .aggregate(Max("report_number"))["report_number__max"]
+                or 0
+            )
+            report = ProgressReport.objects.create(
+                user=user,
+                report_number=last_number + 1,
+                period_start=period_start,
+                period_end=period_end,
+                report_type=report_type,
+                status=ReportStatus.PENDING,
+                triggered_by=triggered_by,
+            )
 
         try:
             data_service = DataCollectionService(user)
@@ -85,12 +100,34 @@ class ReportGenerationService:
 
     def _generate_narrative(self, user, nutrition_data, workout_data, insights, report_type):
         base_prompt = PROMPT_FILE.read_text(encoding="utf-8").strip()
-        length_instruction = (
-            "Keep the whole report concise -- a few sentences per field."
-            if report_type == "short"
-            else "Provide more detailed, thorough feedback in each field."
-        )
-        system_prompt = base_prompt.replace("{LENGTH_INSTRUCTION}", length_instruction)
+
+        if report_type == "short":
+            replacements = {
+                "{LENGTH_MODE_INSTRUCTION}": (
+                    "Write a SHORT report. Every field below should be brief -- "
+                    "hit the key point and stop, don't elaborate."
+                ),
+                "{PROGRESS_SUMMARY_LENGTH}": "2-3 sentences",
+                "{WORKOUT_FEEDBACK_LENGTH}": "1-2 sentences",
+                "{NUTRITION_FEEDBACK_LENGTH}": "1-2 sentences",
+                "{KEY_TAKEAWAYS_LENGTH}": "2-3 short bullet-style sentences",
+            }
+        else:
+            replacements = {
+                "{LENGTH_MODE_INSTRUCTION}": (
+                    "Write a DETAILED report. Every field below should be thorough -- "
+                    "cite specific numbers from the data, explain the 'why' behind each "
+                    "observation, and don't compress multiple points into one sentence."
+                ),
+                "{PROGRESS_SUMMARY_LENGTH}": "5-7 sentences",
+                "{WORKOUT_FEEDBACK_LENGTH}": "2-3 full paragraphs",
+                "{NUTRITION_FEEDBACK_LENGTH}": "2-3 full paragraphs",
+                "{KEY_TAKEAWAYS_LENGTH}": "5-7 detailed bullet-style sentences, each with brief reasoning",
+            }
+
+        system_prompt = base_prompt
+        for placeholder, value in replacements.items():
+            system_prompt = system_prompt.replace(placeholder, value)
 
         profile_summary = DataCollectionService(user).get_profile_summary()
         user_prompt = (
@@ -106,7 +143,7 @@ class ReportGenerationService:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            max_completion_tokens=2500 if report_type == "detailed" else 1600,
+            max_completion_tokens=3000 if report_type == "detailed" else 1600,
             temperature=0.6,
             reasoning_effort="low",
             response_format={"type": "json_object"},

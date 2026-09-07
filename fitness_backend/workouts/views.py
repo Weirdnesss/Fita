@@ -10,7 +10,12 @@ from .serializers import (
     TemplateHistorySerializer,
     WorkoutTemplateSerializer,
 )
-from .services.workout_generator import WorkoutGeneratorError, generate_workout
+from .services.workout_generator import (
+    WorkoutGenerationRateLimitedError,
+    WorkoutGeneratorError,
+    generate_workout,
+    swap_exercise,
+)
 
 
 GENERATED_TEMPLATE_ERROR = {
@@ -297,14 +302,61 @@ class GenerateWorkoutView(APIView):
     """
     POST /workouts/generate/
     The "Generate Workout" dashboard button. Reads the user's Profile
-    (goal, workout frequency, workout location) and regenerates, in
-    place, whichever day-type is next in their split -- see
-    workouts/services/workout_generator.py for the actual rules.
+    (goal, workout frequency, workout location) and (re)generates
+    every day-type template in their split at once -- e.g. both Upper
+    and Lower together -- see workouts/services/workout_generator.py
+    for the actual rules, including the once-per-7-days cooldown and
+    the stagnation check that decides whether a day-type's exercises
+    actually get reshuffled.
+    Response: {"templates": [...]}
+    A 429 response (rate limited) includes "next_eligible_at".
     """
 
     def post(self, request):
         try:
-            template = generate_workout(request.user)
+            templates = generate_workout(request.user)
+        except WorkoutGenerationRateLimitedError as e:
+            return Response(
+                {"error": str(e), "next_eligible_at": e.next_eligible_at.isoformat()},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
         except WorkoutGeneratorError as e:
             return Response({"error": str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        return Response({"templates": WorkoutTemplateSerializer(templates, many=True).data})
+
+
+class TemplateExerciseSwapView(APIView):
+    """
+    POST /workouts/templates/<template_id>/exercises/<exercise_id>/swap/
+    Body: {"reason": "too_hard" | "unavailable" | "wrong"}
+    Replaces this one exercise with a different candidate from the
+    same category, leaving the rest of the template (and the weekly
+    Generate cooldown) untouched. Available on generated templates
+    even though they otherwise block direct edits -- this is the
+    intended way to fix a single bad pick without waiting a week or
+    losing the rest of the routine.
+    """
+
+    REASONS = {"too_hard", "unavailable", "wrong"}
+
+    def post(self, request, template_id, exercise_id):
+        template = get_object_or_404(
+            WorkoutTemplate, id=template_id, user=request.user
+        )
+        exercise = get_object_or_404(
+            TemplateExercise, id=exercise_id, template=template
+        )
+
+        reason = request.data.get("reason")
+        if reason not in self.REASONS:
+            return Response(
+                {"error": f"reason must be one of {sorted(self.REASONS)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            swap_exercise(template, exercise)
+        except WorkoutGeneratorError as e:
+            return Response({"error": str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
         return Response(WorkoutTemplateSerializer(template).data)

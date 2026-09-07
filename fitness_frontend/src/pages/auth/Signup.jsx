@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { register, updateProfile } from "../../api/accounts";
+import { register, updateProfile, logWeight } from "../../api/accounts";
 import { ErrorBanner, extractErrorMessage } from "../../components/Status";
 
 const GENDERS = [
@@ -34,11 +34,6 @@ const LOCATIONS = [
   ["home", "Home"],
   ["mixed", "Mixed"],
 ];
-const EXPERIENCE_LEVELS = [
-  ["beginner", "Beginner"],
-  ["intermediate", "Intermediate"],
-  ["advanced", "Advanced"],
-];
 
 export default function Signup() {
   const { login, refreshUser } = useAuth();
@@ -65,7 +60,6 @@ export default function Signup() {
     foodAllergies: "",
     workoutFrequency: "",
     workoutLocation: "",
-    experienceLevel: "",
   });
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -101,12 +95,18 @@ export default function Signup() {
         gender: form.gender,
         date_of_birth: form.dateOfBirth,
         activity_level: form.activityLevel,
-        current_weight_kg: form.currentWeightKg ? Number(form.currentWeightKg) : null,
         goal_weight_kg: form.goalWeightKg ? Number(form.goalWeightKg) : null,
         height_ft: form.heightFt ? Number(form.heightFt) : null,
         height_in: form.heightIn ? Number(form.heightIn) : null,
         primary_goal: form.primaryGoal,
       });
+      // current_weight_kg is derived, not writable directly (see
+      // ProfileSerializer) -- logging it here is what both sets the
+      // baseline and gives the new Weight History page a first entry
+      // to show, instead of a value with no history behind it.
+      if (form.currentWeightKg) {
+        await logWeight({ weightKg: Number(form.currentWeightKg) });
+      }
       await refreshUser();
       setStep(3);
     } catch (err) {
@@ -126,7 +126,6 @@ export default function Signup() {
         food_allergies: form.foodAllergies,
         workout_frequency: form.workoutFrequency,
         workout_location: form.workoutLocation,
-        experience_level: form.experienceLevel,
       });
       await refreshUser();
       navigate("/profile");
@@ -265,13 +264,6 @@ export default function Signup() {
             <select required value={form.workoutLocation} onChange={set("workoutLocation")}>
               <option value="">Select</option>
               {LOCATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-          <div>
-            <label>Experience level</label>
-            <select required value={form.experienceLevel} onChange={set("experienceLevel")}>
-              <option value="">Select</option>
-              {EXPERIENCE_LEVELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
           <ErrorBanner message={error} />

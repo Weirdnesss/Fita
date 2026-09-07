@@ -81,7 +81,7 @@ define(['./workbox-13942bd7'], (function (workbox) { 'use strict';
     "revision": "3ca0b8505b4bec776b69afdba2768812"
   }, {
     "url": "/index.html",
-    "revision": "0.qumhcfqmsb4"
+    "revision": "0.6o25n1iv53c"
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("/index.html"), {
@@ -91,7 +91,7 @@ define(['./workbox-13942bd7'], (function (workbox) { 'use strict';
     url,
     sameOrigin
   }) => !sameOrigin && /^\/(accounts|workouts|nutrition|coach|progress)\//.test(url.pathname), new workbox.NetworkFirst({
-    "cacheName": "primefit-api",
+    "cacheName": "fitness-api",
     "networkTimeoutSeconds": 8,
     plugins: [new workbox.ExpirationPlugin({
       maxEntries: 200,

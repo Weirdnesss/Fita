@@ -1,22 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
-import { listReports, generateReport, deleteReport } from "../../api/progress";
+import { listReports, generateReport, deleteReport, getReportSettings } from "../../api/progress";
 
 export default function ReportsList() {
   const navigate = useNavigate();
   const showToast = useToast();
   const [reports, setReports] = useState(null);
+  const [settings, setSettings] = useState(null);
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [autoGenerating, setAutoGenerating] = useState(false);
   const [cooldown, setCooldown] = useState(0); // seconds remaining before another generate is allowed
   const [pendingDelete, setPendingDelete] = useState(null); // report id | null
+  const autoTriedRef = useRef(false); // guard against double-firing (e.g. React StrictMode)
 
   useEffect(() => {
     load();
+    refreshSettings();
   }, []);
 
   useEffect(() => {
@@ -25,15 +29,65 @@ export default function ReportsList() {
     return () => clearInterval(t);
   }, [cooldown]);
 
+  // Interval-based generation: there's no server-side scheduler here, so
+  // "automatic" means "check when the app is opened" -- if the user has
+  // allowed it (is_enabled) and a report is due with data to report on,
+  // fire it quietly in the background rather than making them tap Generate.
+  //
+  // autoTriedRef only guards against double-firing within THIS mount (e.g.
+  // React StrictMode's double effect invocation in dev) -- it resets if the
+  // user navigates away (e.g. to Settings) and back, which used to let a
+  // second interval generation fire while the first was still running,
+  // since due_status doesn't flip to "not_due" until the first one finishes
+  // and updates last_generated_at. sessionStorage survives that navigation,
+  // so we don't even attempt a second request; the backend's own
+  // generation_started_at lock is the real backstop if this is ever bypassed
+  // (e.g. two tabs open at once).
+  useEffect(() => {
+    if (!settings || autoTriedRef.current) return;
+    if (settings.due_status !== "due") return;
+    const sessionKey = `progress_auto_gen_tried_${settings.last_generated_at || "never"}`;
+    if (sessionStorage.getItem(sessionKey)) return;
+    autoTriedRef.current = true;
+    sessionStorage.setItem(sessionKey, "1");
+    runIntervalGeneration();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
+
   function load() {
     listReports().then(setReports).catch((err) => setError(extractErrorMessage(err)));
+  }
+
+  function refreshSettings() {
+    getReportSettings().then(setSettings).catch(() => {}); // due-banner is a nice-to-have, fail silently
+  }
+
+  async function runIntervalGeneration() {
+    setAutoGenerating(true);
+    try {
+      const report = await generateReport({ triggeredBy: "interval" });
+      if (report.status === "failed") {
+        // Quiet failure -- the user didn't ask for this one, so don't
+        // interrupt them with an error banner over it.
+        return;
+      }
+      showToast("New interval report generated", "success");
+      load();
+      refreshSettings();
+    } catch {
+      // Same reasoning -- fail silently for an automatic trigger.
+    } finally {
+      setAutoGenerating(false);
+    }
   }
 
   async function handleGenerate() {
     setGenerating(true);
     setError("");
     try {
-      const report = await generateReport({ periodDays: 7, reportType: "short" });
+      // No periodDays/reportType passed -- the backend falls back to the
+      // user's own settings (day_interval/report_type) when omitted.
+      const report = await generateReport({ triggeredBy: "manual" });
       if (report.status === "failed") {
         setError(report.generation_error || "Report generation failed.");
       } else {
@@ -47,6 +101,7 @@ export default function ReportsList() {
     } finally {
       setGenerating(false);
       load();
+      refreshSettings();
     }
   }
 
@@ -67,6 +122,30 @@ export default function ReportsList() {
       <PageHeader title="Progress Reports" subtitle="Generated Reports" />
       <ErrorBanner message={error} />
 
+      {autoGenerating && (
+        <div className="card card-tab" style={{ "--accent-color": "var(--bamboo)" }}>
+          <p style={{ fontSize: 13, color: "var(--text-faint)" }}>Generating your interval report...</p>
+        </div>
+      )}
+      {!autoGenerating && settings?.due_status === "due" && (
+        <div className="card card-tab" style={{ "--accent-color": "var(--turmeric)" }}>
+          <p style={{ fontSize: 13 }}>
+            <span className="pill pill-turmeric" style={{ marginRight: 8 }}>Due</span>
+            {settings.last_generated_at
+              ? `It's been ${settings.day_interval}+ days since your last report.`
+              : "You haven't generated a report yet."}
+          </p>
+        </div>
+      )}
+      {settings?.due_status === "due_no_data" && (
+        <div className="card card-tab" style={{ "--accent-color": "var(--border)" }}>
+          <p style={{ fontSize: 13, color: "var(--text-faint)" }}>
+            You have no workout or food history logged -- it's not recommended to
+            generate a report right now.
+          </p>
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8 }}>
         <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleGenerate} disabled={generating || cooldown > 0}>
           {generating ? "Generating..." : cooldown > 0 ? `Wait ${cooldown}s` : "Generate New Report"}
@@ -81,8 +160,9 @@ export default function ReportsList() {
       {reports?.map((r) => (
         <div key={r.id} className="card card-tab" style={{ marginBottom: 10, cursor: "pointer" }} onClick={() => navigate(`/progress/${r.id}`)}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <p style={{ fontWeight: 600 }}>Report #{r.id}</p>
+            <p style={{ fontWeight: 600 }}>Report #{r.report_number}</p>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <TriggeredByPill triggeredBy={r.triggered_by} />
               <StatusPill status={r.status} />
               <button
                 onClick={(e) => { e.stopPropagation(); setPendingDelete(r.id); }}
@@ -106,7 +186,11 @@ export default function ReportsList() {
       <ConfirmDialog
         open={pendingDelete !== null}
         title="Delete report"
-        message={pendingDelete !== null ? `Delete Report #${pendingDelete}? This can't be undone.` : ""}
+        message={
+          pendingDelete !== null
+            ? `Delete Report #${reports?.find((r) => r.id === pendingDelete)?.report_number ?? ""}? This can't be undone.`
+            : ""
+        }
         confirmLabel="Delete"
         onConfirm={confirmDeleteReport}
         onCancel={() => setPendingDelete(null)}
@@ -122,4 +206,13 @@ function StatusPill({ status }) {
     failed: "pill-chili",
   };
   return <span className={`pill ${map[status] || "pill-chili"}`}>{status}</span>;
+}
+
+function TriggeredByPill({ triggeredBy }) {
+  if (!triggeredBy) return null;
+  return (
+    <span className="pill" style={{ background: "var(--bg-raised)", color: "var(--text-faint)" }}>
+      {triggeredBy === "interval" ? "Interval" : "Manual"}
+    </span>
+  );
 }

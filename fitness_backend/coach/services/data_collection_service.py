@@ -171,7 +171,15 @@ class DataCollectionService:
         avg_duration = round(total_minutes / total_workouts, 1) if total_workouts else 0
 
         period_days = (period_end - period_start).days + 1
-        workouts_per_week = round(total_workouts / (period_days / 7), 1) if period_days else 0
+        # Dividing by (period_days / 7) directly *extrapolates* short
+        # windows upward -- a single workout logged in a 1-day period
+        # became "7 sessions/week" (1 / (1/7) = 7), which is misleading
+        # rather than informative. Clamp the divisor to a minimum of 1
+        # so a period shorter than a week is reported at its literal
+        # count instead of being scaled up; periods of a week or longer
+        # still normalize to a weekly rate as before.
+        divisor = max(period_days / 7, 1)
+        workouts_per_week = round(total_workouts / divisor, 1) if period_days else 0
 
         unique_exercises = set()
         for h in history:

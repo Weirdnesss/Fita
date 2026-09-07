@@ -22,11 +22,12 @@ class WorkoutTemplate(models.Model):
     TemplateExercise. 'kind' distinguishes primary vs. alternative
     routines, matching the two sections on the Workouts dashboard.
 
-    is_generated + day_type back the "Generate Workout" button: each
-    generate call regenerates the one template for a given day_type
-    in place (see workouts/services/workout_generator.py) rather than
-    creating a new row every time, and generated templates can't be
-    edited directly (see the is_generated guards in views.py).
+    is_generated + day_type back the "Generate Workout" button: one
+    click (re)generates every day-type template in the user's split at
+    once, each kept as a single row per day-type per user (see
+    workouts/services/workout_generator.py), and generated templates
+    can't be edited directly (see the is_generated guards in
+    views.py) except via the single-exercise swap endpoint.
     """
 
     user = models.ForeignKey(
@@ -152,6 +153,28 @@ class PerformedExercise(models.Model):
 
     def __str__(self):
         return f"{self.exercise_name} ({self.history})"
+
+
+class WorkoutGenerationState(models.Model):
+    """
+    Tracks the once-per-week cap on the "Generate Workout" button (see
+    workouts/services/workout_generator.py). Kept as its own row
+    rather than reading WorkoutTemplate.updated_at, since a single
+    Generate call can leave some day-types' exercises untouched (no
+    stagnation detected, so the existing exercises are kept to protect
+    progressive overload) while the click still needs to count against
+    the weekly cooldown.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="workout_generation_state",
+    )
+    last_generated_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"WorkoutGenerationState<{self.user.email}>"
 
 
 class WgerExercise(models.Model):

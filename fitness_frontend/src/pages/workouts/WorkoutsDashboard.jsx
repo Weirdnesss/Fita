@@ -30,12 +30,17 @@ export default function WorkoutsDashboard() {
     setError("");
     try {
       await generateWorkout();
-      // Re-fetch rather than patch local state in place: a generate
-      // call can either add a new day-type routine or replace an
-      // existing one, so a full refresh is simplest to keep correct.
+      // Re-fetch rather than patch local state in place: one Generate
+      // call can create/replace multiple day-type routines at once
+      // (the whole split), so a full refresh is simplest to keep correct.
       await load();
     } catch (err) {
-      setError(extractErrorMessage(err, "Couldn't generate a workout."));
+      const nextEligible = err?.response?.data?.next_eligible_at;
+      if (err?.response?.status === 429 && nextEligible) {
+        setError(`Workouts can only be generated once a week. You can generate again on ${new Date(nextEligible).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}.`);
+      } else {
+        setError(extractErrorMessage(err, "Couldn't generate a workout."));
+      }
     } finally {
       setGenerating(false);
     }
@@ -60,7 +65,7 @@ export default function WorkoutsDashboard() {
         <div>
           <p style={{ fontWeight: 600 }}>Generate a workout</p>
           <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-            Built from your goal, frequency, and location
+            Built from your goal, frequency, and location · once a week
           </p>
         </div>
         <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleGenerate} disabled={generating}>
@@ -94,6 +99,15 @@ export default function WorkoutsDashboard() {
                   onClick={() => navigate(`/workouts/templates/${r.id}`)}
                 >
                   Edit
+                </button>
+              )}
+              {r.is_generated && (
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: "6px 12px", fontSize: 12 }}
+                  onClick={() => navigate(`/workouts/templates/${r.id}`)}
+                >
+                  View / Swap
                 </button>
               )}
               <button

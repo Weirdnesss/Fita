@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import Profile
+from .models import Profile, WeightLog
 
 Account = get_user_model()
 
@@ -36,11 +36,14 @@ class ProfileSerializer(serializers.ModelSerializer):
     height_cm = serializers.ReadOnlyField()
     age = serializers.ReadOnlyField()
 
-    # current_weight_kg/goal_weight_kg already have a MinValueValidator(20)
-    # at the model level, but no upper bound -- adding one here. height_ft
-    # and height_in are already fully bounded (3-8, 0-11) on the model, so
-    # nothing to add for those; the ModelSerializer picks those up as-is.
-    current_weight_kg = serializers.FloatField(required=False, allow_null=True, min_value=20, max_value=300)
+    # current_weight_kg is now fully derived -- Signup Step 2 logs the
+    # initial baseline through POST /accounts/weight-logs/ (see
+    # Signup.jsx) instead of writing this field directly, so nothing
+    # writes it anymore except _sync_current_weight() in views.py.
+    # goal_weight_kg keeps its own upper bound below since it's still
+    # a plain editable field.
+    current_weight_kg = serializers.ReadOnlyField()
+    goal_weight_kg = serializers.FloatField(required=False, allow_null=True, min_value=20, max_value=300)
     goal_weight_kg = serializers.FloatField(required=False, allow_null=True, min_value=20, max_value=300)
 
     def validate_date_of_birth(self, value):
@@ -72,7 +75,6 @@ class ProfileSerializer(serializers.ModelSerializer):
             "food_allergies",
             "workout_frequency",
             "workout_location",
-            "experience_level",
             "bmi",
             "height_cm",
         ]
@@ -86,3 +88,14 @@ class AccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
         fields = ["id", "email", "first_name", "last_name", "profile"]
+
+
+class WeightLogSerializer(serializers.ModelSerializer):
+    """A single logged bodyweight entry. See WeightLog on the model."""
+
+    weight_kg = serializers.FloatField(min_value=20, max_value=300)
+
+    class Meta:
+        model = WeightLog
+        fields = ["id", "weight_kg", "logged_at", "created_at"]
+        read_only_fields = ["id", "created_at"]

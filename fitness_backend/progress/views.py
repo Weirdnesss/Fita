@@ -23,6 +23,13 @@ from .services.report_generation_service import ReportGenerationService
 # near-duplicates of the same window.
 MIN_SECONDS_BETWEEN_GENERATIONS = 60
 
+# How long an in-progress generation can hold the lock before we treat it
+# as stale (e.g. the process crashed mid-generation and never cleared it)
+# and let a new request through anyway, rather than being stuck locked out
+# forever. Generation is one LLM call -- this is a generous multiple of how
+# long that normally takes.
+GENERATION_LOCK_TIMEOUT_SECONDS = 120
+
 
 class ProgressReportListView(generics.ListAPIView):
     """GET /progress/reports/  -- "Generated Reports" list."""
@@ -47,13 +54,15 @@ class ProgressReportDetailView(generics.RetrieveDestroyAPIView):
 class GenerateReportView(APIView):
     """
     POST /progress/reports/generate/
-    Body (optional): {"period_days": 7, "report_type": "short"}
-    Triggers on-demand generation for the last `period_days` days
-    (defaults to the user's ProgressReportSettings.day_interval).
+    Body (optional): {"period_days": 7, "report_type": "short", "triggered_by": "manual"}
+    Triggers generation for the last `period_days` days (defaults to the
+    user's ProgressReportSettings.day_interval/report_type when omitted).
     This uses an explicit action instead of a Celery-scheduled midnight
-    job -- simpler to run/demo without a task queue, while
-    ProgressReportSettings.next_generation_date() is still
-    available if you want to add scheduling later.
+    job -- simpler to run/demo without a task queue. "Interval-based"
+    generation is driven the same way, just triggered client-side (see
+    ProgressReportSettings.due_status()) rather than by a server clock;
+    triggered_by="interval" additionally requires is_enabled so a client
+    can't fire an "automatic" report while the user has that switched off.
     """
 
     def post(self, request):
@@ -63,6 +72,12 @@ class GenerateReportView(APIView):
 
         settings_obj, _ = ProgressReportSettings.objects.get_or_create(user=request.user)
 
+        if data["triggered_by"] == "interval" and not settings_obj.is_enabled:
+            return Response(
+                {"error": "Interval-based generation is turned off in report settings."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         if settings_obj.last_generated_at:
             elapsed = (timezone.now() - settings_obj.last_generated_at).total_seconds()
             if elapsed < MIN_SECONDS_BETWEEN_GENERATIONS:
@@ -70,6 +85,22 @@ class GenerateReportView(APIView):
                 return Response(
                     {
                         "error": f"Please wait {wait_seconds}s before generating another report.",
+                        "retry_after_seconds": wait_seconds,
+                    },
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
+        if settings_obj.generation_started_at:
+            in_progress_for = (timezone.now() - settings_obj.generation_started_at).total_seconds()
+            if in_progress_for < GENERATION_LOCK_TIMEOUT_SECONDS:
+                # A generation is already running for this user (e.g. the
+                # user navigated away and back before it finished, and the
+                # frontend fired another auto-trigger). last_generated_at
+                # alone can't catch this since it hasn't updated yet.
+                wait_seconds = round(GENERATION_LOCK_TIMEOUT_SECONDS - in_progress_for)
+                return Response(
+                    {
+                        "error": "A report is already being generated -- please wait for it to finish.",
                         "retry_after_seconds": wait_seconds,
                     },
                     status=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -86,12 +117,19 @@ class GenerateReportView(APIView):
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
-        report = service.generate_report(
-            user=request.user,
-            period_start=period_start,
-            period_end=period_end,
-            report_type=report_type,
-        )
+        settings_obj.generation_started_at = timezone.now()
+        settings_obj.save(update_fields=["generation_started_at"])
+        try:
+            report = service.generate_report(
+                user=request.user,
+                period_start=period_start,
+                period_end=period_end,
+                report_type=report_type,
+                triggered_by=data["triggered_by"],
+            )
+        finally:
+            settings_obj.generation_started_at = None
+            settings_obj.save(update_fields=["generation_started_at"])
 
         response_status = (
             status.HTTP_201_CREATED if report.status == "generated" else status.HTTP_502_BAD_GATEWAY

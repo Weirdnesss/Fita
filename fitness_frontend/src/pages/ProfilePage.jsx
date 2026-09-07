@@ -48,7 +48,7 @@ export default function ProfilePage() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-          <StatBox label="Weight" value={profile.current_weight_kg ?? "--"} unit="kg" />
+          <StatBox label="Weight" value={profile.current_weight_kg ?? "--"} unit="kg" onClick={() => navigate("/profile/weight")} />
           <StatBox label="Goal" value={profile.goal_weight_kg ?? "--"} unit="kg" accent="bamboo" />
           <StatBox label="BMI" value={profile.bmi ?? "--"} unit="" accent="turmeric" />
         </div>
@@ -61,7 +61,6 @@ export default function ProfilePage() {
         <DetailRow label="Height" value={profile.height_cm ? `${profile.height_cm} cm` : "--"} />
         <DetailRow label="Workout frequency" value={profile.workout_frequency ? `${profile.workout_frequency} / week` : "--"} />
         <DetailRow label="Workout location" value={formatChoice(profile.workout_location)} />
-        <DetailRow label="Experience level" value={formatChoice(profile.experience_level)} />
         {profile.medical_conditions && <DetailRow label="Medical conditions" value={profile.medical_conditions} />}
         {profile.food_allergies && <DetailRow label="Food allergies" value={profile.food_allergies} />}
       </div>
@@ -69,9 +68,12 @@ export default function ProfilePage() {
   );
 }
 
-function StatBox({ label, value, unit, accent }) {
+function StatBox({ label, value, unit, accent, onClick }) {
   return (
-    <div style={{ textAlign: "center", padding: "10px 4px", background: "var(--bg-raised)", borderRadius: "var(--radius-sm)" }}>
+    <div
+      style={{ textAlign: "center", padding: "10px 4px", background: "var(--bg-raised)", borderRadius: "var(--radius-sm)", cursor: onClick ? "pointer" : "default" }}
+      onClick={onClick}
+    >
       <div className="stat" style={{ fontSize: 18, color: accent ? `var(--${accent})` : "var(--text)" }}>
         {value}
         {unit && <span style={{ fontSize: 11, color: "var(--text-faint)" }}> {unit}</span>}

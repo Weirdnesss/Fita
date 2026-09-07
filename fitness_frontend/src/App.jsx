@@ -8,6 +8,7 @@ import Login from "./pages/auth/Login";
 import Signup from "./pages/auth/Signup";
 import ProfilePage from "./pages/ProfilePage";
 import EditProfile from "./pages/EditProfile";
+import WeightLog from "./pages/WeightLog";
 
 import WorkoutsDashboard from "./pages/workouts/WorkoutsDashboard";
 import TemplateEditor from "./pages/workouts/TemplateEditor";
@@ -43,6 +44,7 @@ export default function App() {
             >
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/edit" element={<EditProfile />} />
+              <Route path="/profile/weight" element={<WeightLog />} />
 
               <Route path="/workouts" element={<WorkoutsDashboard />} />
               <Route path="/workouts/new" element={<TemplateEditor />} />

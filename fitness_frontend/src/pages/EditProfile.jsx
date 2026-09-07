@@ -35,11 +35,6 @@ const LOCATIONS = [
   ["home", "Home"],
   ["mixed", "Mixed"],
 ];
-const EXPERIENCE_LEVELS = [
-  ["beginner", "Beginner"],
-  ["intermediate", "Intermediate"],
-  ["advanced", "Advanced"],
-];
 
 // Profile fields the backend returns as plain values -- prefill the
 // form directly from user.profile (already in AuthContext via getMe())
@@ -50,7 +45,6 @@ function initialFormFrom(profile) {
     gender: profile.gender || "",
     dateOfBirth: profile.date_of_birth || "",
     activityLevel: profile.activity_level || "",
-    currentWeightKg: profile.current_weight_kg ?? "",
     goalWeightKg: profile.goal_weight_kg ?? "",
     heightFt: profile.height_ft ?? "",
     heightIn: profile.height_in ?? "",
@@ -59,7 +53,6 @@ function initialFormFrom(profile) {
     foodAllergies: profile.food_allergies || "",
     workoutFrequency: profile.workout_frequency || "",
     workoutLocation: profile.workout_location || "",
-    experienceLevel: profile.experience_level || "",
   };
 }
 
@@ -81,7 +74,6 @@ export default function EditProfile() {
         gender: form.gender,
         date_of_birth: form.dateOfBirth,
         activity_level: form.activityLevel,
-        current_weight_kg: form.currentWeightKg !== "" ? Number(form.currentWeightKg) : null,
         goal_weight_kg: form.goalWeightKg !== "" ? Number(form.goalWeightKg) : null,
         height_ft: form.heightFt !== "" ? Number(form.heightFt) : null,
         height_in: form.heightIn !== "" ? Number(form.heightIn) : null,
@@ -90,7 +82,6 @@ export default function EditProfile() {
         food_allergies: form.foodAllergies,
         workout_frequency: form.workoutFrequency,
         workout_location: form.workoutLocation,
-        experience_level: form.experienceLevel,
       });
       // So /profile shows the new values immediately instead of the
       // stale copy AuthContext loaded at login/last refresh.
@@ -131,8 +122,13 @@ export default function EditProfile() {
             </select>
           </div>
           <div>
-            <label>Current weight (kg)</label>
-            <input type="number" step="0.1" value={form.currentWeightKg} onChange={set("currentWeightKg")} />
+            <label>Current weight</label>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "var(--bg-raised)", borderRadius: "var(--radius-sm)", fontSize: 14 }}>
+              <span>{user?.profile?.current_weight_kg != null ? `${user.profile.current_weight_kg} kg` : "Not logged yet"}</span>
+              <button type="button" className="btn-ghost" style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 13, padding: 0 }} onClick={() => navigate("/profile/weight")}>
+                Log weight
+              </button>
+            </div>
           </div>
         </div>
 
@@ -176,14 +172,6 @@ export default function EditProfile() {
               {LOCATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
-        </div>
-
-        <div>
-          <label>Experience level</label>
-          <select value={form.experienceLevel} onChange={set("experienceLevel")}>
-            <option value="">Select</option>
-            {EXPERIENCE_LEVELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
         </div>
 
         <div>

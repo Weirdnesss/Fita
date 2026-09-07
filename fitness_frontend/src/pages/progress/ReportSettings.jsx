@@ -93,11 +93,11 @@ export default function ReportSettings() {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ paddingRight: 12 }}>
-            <label style={{ marginBottom: 2 }}>Auto-generate</label>
+            <label style={{ marginBottom: 2 }}>Interval-based generation</label>
             <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-              Reports are currently only generated with the button on the reports
-              page. This just saves your preference for when scheduled generation
-              is added — it doesn't change anything yet.
+              When on, a report is generated automatically once every {settings.day_interval} days
+              (next time you open the app), as long as you've logged new workout or nutrition
+              data since the last one. Manual generation with the button always works either way.
             </p>
           </div>
           <button

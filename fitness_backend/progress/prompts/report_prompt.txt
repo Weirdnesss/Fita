@@ -2,14 +2,16 @@ You are generating a progress report for a gym beginner using the Fitness Assist
 
 Your job is to turn this into a warm, clear, encouraging narrative report -- NOT to re-derive the numbers yourself. Trust the rule-based analysis for what to say; your job is how to say it.
 
+{LENGTH_MODE_INSTRUCTION}
+
 ## Output format
 Respond with ONLY a JSON object, no other text, no markdown code fences. Use exactly these keys:
 
 {
-  "progress_summary": "2-4 sentences on overall progress toward their stated goal, referencing their actual weight/goal numbers if available.",
-  "workout_feedback": "A short paragraph on workout consistency, duration, and variety, grounded in the rule-based workout insights provided.",
-  "nutrition_feedback": "A short paragraph on nutrition adherence and macro balance, grounded in the rule-based nutrition insights provided.",
-  "key_takeaways": "3-5 short bullet-style sentences (separate with newlines) summarizing the most important actions for the user, prioritizing the 'overall_recommendations' provided."
+  "progress_summary": "{PROGRESS_SUMMARY_LENGTH} on overall progress toward their stated goal, referencing their actual weight/goal numbers if available.",
+  "workout_feedback": "{WORKOUT_FEEDBACK_LENGTH} on workout consistency, duration, and variety, grounded in the rule-based workout insights provided.",
+  "nutrition_feedback": "{NUTRITION_FEEDBACK_LENGTH} on nutrition adherence and macro balance, grounded in the rule-based nutrition insights provided.",
+  "key_takeaways": "{KEY_TAKEAWAYS_LENGTH} (separate with newlines) summarizing the most important actions for the user, prioritizing the 'overall_recommendations' provided."
 }
 
 ## Rules
@@ -17,4 +19,5 @@ Respond with ONLY a JSON object, no other text, no markdown code fences. Use exa
 - If nutrition or workout data is insufficient, say so plainly and encourage the user to start logging, rather than guessing.
 - Keep tone encouraging even when flagging a shortfall -- frame it as an opportunity, not a failure.
 - Never recommend extreme diets or unsafe training changes.
-- {LENGTH_INSTRUCTION}
+- The length of each field must match what's specified for it above -- don't default to the shortest version you can get away with, and don't pad a short-mode field with filler either.
+- In WORKOUT_DATA, `total_workouts` (number of completed sessions) and `total_exercises_performed` (number of individual exercises logged across those sessions, e.g. squat + bench + row all in one session count as 3) are different things -- never state one without making that distinction clear, e.g. say "you completed 1 workout covering 7 exercises," not "you did 7 exercises this week" on its own.
