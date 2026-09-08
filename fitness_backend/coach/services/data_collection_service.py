@@ -85,10 +85,24 @@ class DataCollectionService:
             )
         return "\n".join(lines)
 
+    def get_recent_weight_summary(self, limit=5):
+        from accounts.models import WeightLog
+
+        entries = WeightLog.objects.filter(user=self.user)[:limit]
+        if not entries.exists():
+            return "No weight logged yet."
+
+        lines = [f"Last {entries.count()} weigh-in(s), most recent first:"]
+        for entry in entries:
+            lines.append(f"- {entry.logged_at}: {entry.weight_kg} kg")
+        return "\n".join(lines)
+
     def get_full_context(self):
         return (
             "=== USER PROFILE ===\n"
             f"{self.get_profile_summary()}\n\n"
+            "=== RECENT WEIGHT LOG ===\n"
+            f"{self.get_recent_weight_summary()}\n\n"
             "=== RECENT WORKOUTS ===\n"
             f"{self.get_recent_workouts_summary()}\n\n"
             "=== RECENT NUTRITION ===\n"
@@ -150,6 +164,35 @@ class DataCollectionService:
             },
             "goals": goals,
             "adherence": adherence,
+        }
+
+    def get_structured_weight_data(self, period_start, period_end):
+        from accounts.models import WeightLog
+
+        profile = getattr(self.user, "profile", None)
+        entries = WeightLog.objects.filter(
+            user=self.user, logged_at__gte=period_start, logged_at__lte=period_end
+        ).order_by("logged_at")
+        if not entries.exists():
+            return {"has_data": False, "message": "No weight logged in this period"}
+
+        first, last = entries.first(), entries.last()
+        period_days = (period_end - period_start).days + 1
+        change_kg = round(last.weight_kg - first.weight_kg, 1)
+        weeks = period_days / 7 if period_days else 1
+        weekly_rate_kg = round(change_kg / weeks, 2) if weeks else 0.0
+
+        return {
+            "has_data": True,
+            "entries_logged": entries.count(),
+            "period_days": period_days,
+            "start_weight_kg": first.weight_kg,
+            "start_date": str(first.logged_at),
+            "end_weight_kg": last.weight_kg,
+            "end_date": str(last.logged_at),
+            "change_kg": change_kg,
+            "weekly_rate_kg": weekly_rate_kg,
+            "goal_weight_kg": profile.goal_weight_kg if profile else None,
         }
 
     def get_structured_workout_data(self, period_start, period_end):

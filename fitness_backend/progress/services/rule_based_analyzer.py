@@ -9,14 +9,16 @@ than the model inventing plausible-sounding feedback.
 
 
 class RuleBasedAnalyzer:
-    def analyze_all(self, nutrition_data, workout_data):
+    def analyze_all(self, nutrition_data, workout_data, weight_data=None):
         nutrition_insights = self._analyze_nutrition(nutrition_data)
         workout_insights = self._analyze_workout(workout_data)
+        weight_insights = self._analyze_weight(weight_data or {"has_data": False})
         return {
             "nutrition_insights": nutrition_insights,
             "workout_insights": workout_insights,
+            "weight_insights": weight_insights,
             "overall_recommendations": self._combine_recommendations(
-                nutrition_insights, workout_insights
+                nutrition_insights, workout_insights, weight_insights
             ),
         }
 
@@ -120,7 +122,63 @@ class RuleBasedAnalyzer:
             },
         }
 
-    def _combine_recommendations(self, nutrition_insights, workout_insights):
+    def _analyze_weight(self, data):
+        if not data.get("has_data"):
+            return {"status": "insufficient_data", "insights": []}
+
+        insights = []
+        change = data["change_kg"]
+        entries_logged = data["entries_logged"]
+
+        if entries_logged < 2:
+            insights.append({
+                "type": "improvement", "category": "consistency",
+                "message": "Only one weigh-in logged this period -- log weight regularly (e.g. weekly) to see a real trend, not just a single number.",
+            })
+        else:
+            if change < 0:
+                direction = "decreased"
+            elif change > 0:
+                direction = "increased"
+            else:
+                direction = "stayed steady"
+            insights.append({
+                "type": "info", "category": "trend",
+                "message": f"Weight {direction} by {abs(change)} kg over the period, averaging {abs(data['weekly_rate_kg'])} kg/week.",
+            })
+
+            goal_weight = data.get("goal_weight_kg")
+            if goal_weight:
+                remaining = round(data["end_weight_kg"] - goal_weight, 1)
+                if abs(remaining) < 0.5:
+                    insights.append({"type": "excellent", "category": "goal", "message": "Right around goal weight."})
+                elif (remaining > 0 and change < 0) or (remaining < 0 and change > 0):
+                    insights.append({
+                        "type": "success", "category": "goal",
+                        "message": f"Trending toward goal weight -- about {abs(remaining)} kg to go.",
+                    })
+                elif change == 0:
+                    insights.append({
+                        "type": "moderate", "category": "goal",
+                        "message": f"Weight is steady -- about {abs(remaining)} kg from goal.",
+                    })
+                else:
+                    insights.append({
+                        "type": "caution", "category": "goal",
+                        "message": f"Trending away from goal weight -- about {abs(remaining)} kg remaining.",
+                    })
+
+        return {
+            "status": "analyzed",
+            "insights": insights,
+            "key_metrics": {
+                "change_kg": change,
+                "weekly_rate_kg": data["weekly_rate_kg"],
+                "entries_logged": entries_logged,
+            },
+        }
+
+    def _combine_recommendations(self, nutrition_insights, workout_insights, weight_insights=None):
         recs = []
         n_ok = nutrition_insights["status"] == "analyzed"
         w_ok = workout_insights["status"] == "analyzed"
@@ -158,6 +216,13 @@ class RuleBasedAnalyzer:
 
         if n_ok and nutrition_insights["key_metrics"]["tracking_consistency"] < 70:
             recs.append({"priority": "medium", "category": "tracking_consistency", "recommendation": "Log meals daily for more reliable nutrition insights."})
+
+        weight_insights = weight_insights or {"status": "insufficient_data"}
+        if weight_insights["status"] != "analyzed" and (n_ok or w_ok):
+            recs.append({
+                "priority": "low", "category": "start_weight_tracking",
+                "recommendation": "Log weight weekly to track progress toward your goal alongside nutrition and workouts.",
+            })
 
         # De-duplicate categories in case multiple branches produced an
         # overlapping recommendation (e.g. foundational_habits alongside

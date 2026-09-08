@@ -1,6 +1,6 @@
 """
 Ties together the hybrid progress-report pipeline:
-  1. Collect structured nutrition/workout data for the period
+  1. Collect structured nutrition/workout/weight data for the period
      (coach.services.DataCollectionService).
   2. Run it through RuleBasedAnalyzer for threshold-based insights.
   3. Hand both the raw data and the rule-based insights to the LLM,
@@ -65,6 +65,7 @@ class ReportGenerationService:
             data_service = DataCollectionService(user)
             nutrition_data = data_service.get_structured_nutrition_data(period_start, period_end)
             workout_data = data_service.get_structured_workout_data(period_start, period_end)
+            weight_data = data_service.get_structured_weight_data(period_start, period_end)
 
             if not nutrition_data.get("has_data") and not workout_data.get("has_data"):
                 report.status = ReportStatus.FAILED
@@ -72,11 +73,11 @@ class ReportGenerationService:
                 report.save()
                 return report
 
-            insights = RuleBasedAnalyzer().analyze_all(nutrition_data, workout_data)
+            insights = RuleBasedAnalyzer().analyze_all(nutrition_data, workout_data, weight_data)
             report.rule_based_insights = insights
 
             content = self._generate_narrative(
-                user, nutrition_data, workout_data, insights, report_type
+                user, nutrition_data, workout_data, weight_data, insights, report_type
             )
 
             report.progress_summary = content.get("progress_summary", "")
@@ -98,7 +99,7 @@ class ReportGenerationService:
             report.save()
             return report
 
-    def _generate_narrative(self, user, nutrition_data, workout_data, insights, report_type):
+    def _generate_narrative(self, user, nutrition_data, workout_data, weight_data, insights, report_type):
         base_prompt = PROMPT_FILE.read_text(encoding="utf-8").strip()
 
         if report_type == "short":
@@ -134,6 +135,7 @@ class ReportGenerationService:
             f"=== USER PROFILE ===\n{profile_summary}\n\n"
             f"=== NUTRITION DATA ===\n{json.dumps(nutrition_data, indent=2)}\n\n"
             f"=== WORKOUT DATA ===\n{json.dumps(workout_data, indent=2)}\n\n"
+            f"=== WEIGHT DATA ===\n{json.dumps(weight_data, indent=2)}\n\n"
             f"=== RULE-BASED INSIGHTS ===\n{json.dumps(insights, indent=2)}"
         )
 
