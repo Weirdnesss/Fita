@@ -5,6 +5,7 @@ summary that gets injected into the LLM's system prompt. This is the
 "contextual awareness" layer, built against our own models.
 """
 
+from django.db.models import Count
 from django.utils import timezone
 
 from nutrition.models import DailyEntry, NutritionProfile
@@ -66,7 +67,17 @@ class DataCollectionService:
         if not nutrition_profile:
             return "No nutrition data logged yet."
 
-        entries = DailyEntry.objects.filter(nutrition_profile=nutrition_profile)[:days]
+        # Opening the Nutrition tab for a date used to auto-create an
+        # empty DailyEntry row for it even with nothing logged (see
+        # DailyEntryView.get, since fixed) -- filtering to rows that
+        # actually have food logged keeps that (and any pre-existing
+        # empty rows already in the DB) from counting as "tracked days"
+        # here in the coach's context.
+        entries = (
+            DailyEntry.objects.filter(nutrition_profile=nutrition_profile)
+            .annotate(num_food_entries=Count("food_entries"))
+            .filter(num_food_entries__gt=0)[:days]
+        )
         if not entries.exists():
             return "No nutrition data logged yet."
 
@@ -122,7 +133,12 @@ class DataCollectionService:
             nutrition_profile=nutrition_profile,
             date__gte=period_start,
             date__lte=period_end,
-        )
+        ).annotate(num_food_entries=Count("food_entries")).filter(num_food_entries__gt=0)
+        # Same fix as get_recent_nutrition_summary above -- without the
+        # food_entries filter, an empty DailyEntry row (created just by
+        # viewing the Nutrition tab, pre-fix) counted as a "tracked day"
+        # here, which is how a user who never logged anything could see
+        # "100% tracking consistency" with 0 calories/protein.
         if not entries.exists():
             return {"has_data": False, "message": "No nutrition data logged in this period"}
 

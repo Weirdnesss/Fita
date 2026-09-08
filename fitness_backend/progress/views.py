@@ -156,10 +156,18 @@ class GenerateReportView(APIView):
             settings_obj.generation_started_at = None
             settings_obj.save(update_fields=["generation_started_at"])
 
-        response_status = (
-            status.HTTP_201_CREATED if report.status == "generated" else status.HTTP_502_BAD_GATEWAY
-        )
-        return Response(ProgressReportDetailSerializer(report).data, status=response_status)
+        # Always 201: a ProgressReport row was genuinely created and
+        # persisted here in every case (generate_report() never raises --
+        # see its own try/except, which returns a status="failed" report
+        # rather than letting an exception escape). Returning 502 for a
+        # "failed" status used to make axios treat this as a rejected
+        # request, so the frontend's error handler received the raw report
+        # JSON instead of an {error: ...} shape and displayed the first
+        # object key's value (the report's numeric id) as if it were an
+        # error message. The frontend already checks report.status ===
+        # "failed" on a successful response to show the real
+        # generation_error -- that only works if we actually return 2xx.
+        return Response(ProgressReportDetailSerializer(report).data, status=status.HTTP_201_CREATED)
 
 
 class ProgressReportSettingsView(generics.RetrieveUpdateAPIView):

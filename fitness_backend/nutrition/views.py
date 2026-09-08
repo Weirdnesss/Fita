@@ -153,9 +153,28 @@ class DailyEntryView(APIView):
         date = timezone.datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else timezone.localdate()
 
         nutrition_profile, _ = NutritionProfile.objects.get_or_create(user=request.user)
-        daily_entry, _ = DailyEntry.objects.get_or_create(
+        daily_entry = DailyEntry.objects.filter(
             nutrition_profile=nutrition_profile, date=date
-        )
+        ).first()
+        if daily_entry is None:
+            # Deliberately NOT get_or_create here -- viewing an empty day
+            # used to permanently create a DailyEntry row for it, which
+            # then got miscounted as a "tracked day" elsewhere (progress
+            # report, coach context) even with zero food logged. A row is
+            # only created once food is actually added, in
+            # FoodEntryCreateView below. This response matches
+            # DailyEntrySerializer's shape for a day with nothing in it.
+            return Response(
+                {
+                    "id": None,
+                    "date": date.isoformat(),
+                    "total_calories": 0,
+                    "total_protein": 0,
+                    "total_carbs": 0,
+                    "total_fat": 0,
+                    "food_entries": [],
+                }
+            )
         return Response(DailyEntrySerializer(daily_entry).data)
 
 
