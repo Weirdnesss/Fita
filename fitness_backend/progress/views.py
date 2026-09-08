@@ -1,18 +1,20 @@
 from datetime import timedelta
 
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import ProgressReport, ProgressReportSettings
+from .models import ProgressReport, ProgressReportSettings, ReportStatus
 from .serializers import (
     GenerateReportSerializer,
     ProgressReportDetailSerializer,
     ProgressReportListSerializer,
     ProgressReportSettingsSerializer,
 )
+from .services.pdf_export import build_report_pdf
 from .services.report_generation_service import ReportGenerationService
 
 # A short spam guard, NOT the user's day_interval schedule -- day_interval
@@ -49,6 +51,29 @@ class ProgressReportDetailView(generics.RetrieveDestroyAPIView):
 
     def get_queryset(self):
         return ProgressReport.objects.filter(user=self.request.user)
+
+
+class ProgressReportPDFView(APIView):
+    """
+    GET /progress/reports/<id>/pdf/
+    Renders the report as a downloadable PDF -- same content as the
+    ReportDetail page (summary/feedback/takeaways/recommendations), for
+    saving or sharing outside the app. Only available once a report has
+    actually finished generating; a pending/failed report has no
+    narrative content to export yet.
+    """
+
+    def get(self, request, pk):
+        report = get_object_or_404(ProgressReport, id=pk, user=request.user)
+        if report.status != ReportStatus.GENERATED:
+            return Response(
+                {"error": "Only a successfully generated report can be exported."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        pdf_bytes = build_report_pdf(report)
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="progress-report-{report.report_number}.pdf"'
+        return response
 
 
 class GenerateReportView(APIView):

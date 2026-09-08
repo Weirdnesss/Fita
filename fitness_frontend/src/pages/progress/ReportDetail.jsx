@@ -2,16 +2,30 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
-import { getReport } from "../../api/progress";
+import { useToast } from "../../context/ToastContext";
+import { getReport, downloadReportPdf } from "../../api/progress";
 
 export default function ReportDetail() {
   const { id } = useParams();
+  const showToast = useToast();
   const [report, setReport] = useState(null);
   const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     getReport(id).then(setReport).catch((err) => setError(extractErrorMessage(err)));
   }, [id]);
+
+  async function handleDownloadPdf() {
+    setDownloading(true);
+    try {
+      await downloadReportPdf(id, `progress-report-${report.report_number}.pdf`);
+    } catch (err) {
+      showToast(extractErrorMessage(err, "Couldn't download the PDF."), "error");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   if (!report) {
     return (
@@ -35,6 +49,12 @@ export default function ReportDetail() {
 
       {report.status === "failed" && (
         <ErrorBanner message={report.generation_error || "This report failed to generate."} />
+      )}
+
+      {report.status === "generated" && (
+        <button className="btn btn-secondary" onClick={handleDownloadPdf} disabled={downloading} style={{ marginBottom: 12 }}>
+          {downloading ? "Preparing PDF..." : "Download PDF"}
+        </button>
       )}
 
       {report.progress_summary && (
