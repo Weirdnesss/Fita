@@ -45,7 +45,6 @@ function initialFormFrom(profile) {
     gender: profile.gender || "",
     dateOfBirth: profile.date_of_birth || "",
     activityLevel: profile.activity_level || "",
-    goalWeightKg: profile.goal_weight_kg ?? "",
     heightFt: profile.height_ft ?? "",
     heightIn: profile.height_in ?? "",
     primaryGoal: profile.primary_goal || "",
@@ -74,7 +73,6 @@ export default function EditProfile() {
         gender: form.gender,
         date_of_birth: form.dateOfBirth,
         activity_level: form.activityLevel,
-        goal_weight_kg: form.goalWeightKg !== "" ? Number(form.goalWeightKg) : null,
         height_ft: form.heightFt !== "" ? Number(form.heightFt) : null,
         height_in: form.heightIn !== "" ? Number(form.heightIn) : null,
         primary_goal: form.primaryGoal,
@@ -134,8 +132,13 @@ export default function EditProfile() {
 
         <div style={row2}>
           <div>
-            <label>Goal weight (kg)</label>
-            <input type="number" step="0.1" value={form.goalWeightKg} onChange={set("goalWeightKg")} />
+            <label>Goal weight</label>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "var(--bg-raised)", borderRadius: "var(--radius-sm)", fontSize: 14 }}>
+              <span>{user?.profile?.goal_weight_kg != null ? `${user.profile.goal_weight_kg} kg` : "Not set"}</span>
+              <button type="button" className="btn-ghost" style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 13, padding: 0 }} onClick={() => navigate("/profile/weight")}>
+                Change
+              </button>
+            </div>
           </div>
           <div>
             <label>Height (ft)</label>

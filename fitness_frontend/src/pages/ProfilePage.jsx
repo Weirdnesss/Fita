@@ -49,7 +49,7 @@ export default function ProfilePage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
           <StatBox label="Weight" value={profile.current_weight_kg ?? "--"} unit="kg" onClick={() => navigate("/profile/weight")} />
-          <StatBox label="Goal" value={profile.goal_weight_kg ?? "--"} unit="kg" accent="bamboo" />
+          <StatBox label="Goal" value={profile.goal_weight_kg ?? "--"} unit="kg" accent="bamboo" onClick={() => navigate("/profile/weight")} />
           <StatBox label="BMI" value={profile.bmi ?? "--"} unit="" accent="turmeric" />
         </div>
       </div>
