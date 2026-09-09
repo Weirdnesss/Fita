@@ -33,8 +33,8 @@ export function AuthProvider({ children }) {
     await refreshUser();
   };
 
-  const logout = () => {
-    apiLogout();
+  const logout = async () => {
+    await apiLogout();
     setUser(null);
   };
 

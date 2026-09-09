@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
-import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
+import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 import { getDailyEntry, getNutritionProfile, deleteFoodEntry, updateFoodEntry } from "../../api/nutrition";
+
 
 const MEALS = [
   ["breakfast", "Breakfast"],
@@ -69,14 +70,18 @@ export default function NutritionDashboard() {
   const [editingId, setEditingId] = useState(null);
   const [editAmount, setEditAmount] = useState("");
   const [editMeal, setEditMeal] = useState("");
+  const [editDate, setEditDate] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
+
+  const oldestAllowedDate = toDateStr(new Date(Date.now() - MAX_BACKDATE_DAYS * 86400000));
 
   function startEdit(entry) {
     const isGramBased = entry.serving_description === "100g";
     setEditingId(entry.id);
     setEditAmount(isGramBased ? entry.servings * entry.serving_size_g : entry.servings);
     setEditMeal(entry.meal_type);
+    setEditDate(selectedDate);
     setEditError("");
   }
 
@@ -91,13 +96,18 @@ export default function NutritionDashboard() {
       setEditError("Enter a valid amount before saving.");
       return;
     }
+    const dateChanged = editDate !== selectedDate;
     setEditSaving(true);
     setEditError("");
     try {
-      await updateFoodEntry(entry.id, { mealType: editMeal, servings });
+      await updateFoodEntry(entry.id, {
+        mealType: editMeal,
+        servings,
+        date: dateChanged ? editDate : undefined,
+      });
       setEditingId(null);
       load(selectedDate);
-      showToast("Entry updated", "success");
+      showToast(dateChanged ? `Moved to ${formatDayLabel(editDate)}` : "Entry updated", "success");
     } catch (err) {
       setEditError(extractErrorMessage(err));
     } finally {
@@ -172,7 +182,10 @@ export default function NutritionDashboard() {
           <h3>Food Entries</h3>
           <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{formatDayLabel(selectedDate)}</span>
         </div>
-        {MEALS.map(([key, label]) => (
+        {daily.food_entries.length === 0 && (
+          <EmptyState title="Nothing logged yet" eyebrow={`Nothing added for ${formatDayLabel(selectedDate).toLowerCase()}`} />
+        )}
+        {daily.food_entries.length > 0 && MEALS.map(([key, label]) => (
           <div key={key} className="card" style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
               <p style={{ fontWeight: 600 }}>{label}</p>
@@ -181,7 +194,7 @@ export default function NutritionDashboard() {
               </span>
             </div>
             {entriesByMeal[key].length === 0 && (
-              <p style={{ fontSize: 13, color: "var(--text-faint)" }}>No foods added</p>
+              <p style={{ fontSize: 12, color: "var(--text-faint)", opacity: 0.6 }}>—</p>
             )}
             {entriesByMeal[key].map((e) => (
               <div key={e.id} style={{ padding: "6px 0", borderTop: "1px solid var(--border-soft)" }}>
@@ -202,6 +215,25 @@ export default function NutritionDashboard() {
                       <select value={editMeal} onChange={(ev) => setEditMeal(ev.target.value)} style={{ flex: 1 }}>
                         {MEALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                       </select>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        type="date"
+                        value={editDate}
+                        min={oldestAllowedDate}
+                        max={toDateStr(new Date())}
+                        onChange={(ev) => setEditDate(ev.target.value)}
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        className="btn btn-secondary"
+                        style={{ flexShrink: 0 }}
+                        onClick={() => navigate("/nutrition/search", {
+                          state: { date: selectedDate, editingEntryId: e.id, editingMealType: e.meal_type },
+                        })}
+                      >
+                        Change Food
+                      </button>
                     </div>
                     {editError && <p style={{ fontSize: 12, color: "var(--chili)" }}>{editError}</p>}
                     <div style={{ display: "flex", gap: 8 }}>
@@ -236,6 +268,9 @@ export default function NutritionDashboard() {
           </div>
         ))}
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-secondary" onClick={() => navigate("/nutrition/trends")}>
+            Trends
+          </button>
           {isWithinLogWindow ? (
             <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate("/nutrition/search", { state: { date: selectedDate } })}>
               Add Food
@@ -316,9 +351,9 @@ function MacroProgress({ label, consumed, goal }) {
   const isOver = consumed > goal;
   return (
     <div style={{ width: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-        <span style={{ color: "var(--text-dim)" }}>{label}</span>
-        <span style={{ color: isOver ? "var(--chili)" : "var(--text-dim)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+        <span className="eyebrow">{label}</span>
+        <span className="stat" style={{ fontSize: 12, color: isOver ? "var(--chili)" : "var(--text-dim)" }}>
           {Math.round(consumed)}g / {Math.round(goal)}g
         </span>
       </div>

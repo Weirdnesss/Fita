@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+from django.db import Error as DjangoDBError
+from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -95,41 +97,77 @@ class GenerateReportView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        settings_obj, _ = ProgressReportSettings.objects.get_or_create(user=request.user)
+        # Ensure the row exists first (plain get_or_create, no lock needed
+        # for that part -- it's only the check-and-set below that's racy).
+        ProgressReportSettings.objects.get_or_create(user=request.user)
 
-        if data["triggered_by"] == "interval" and not settings_obj.is_enabled:
+        # The three guards below (interval-enabled, cooldown, in-progress
+        # lock) and the generation_started_at write that follows must be
+        # read-checked-and-written as one atomic unit. select_for_update()
+        # blocks a second near-simultaneous request here until the first
+        # one commits, so it sees the just-written generation_started_at
+        # and correctly gets the "already running" 429 below, instead of
+        # both requests reading generation_started_at=None and both firing
+        # a real LLM call. Same pattern already used for report_number in
+        # ReportGenerationService.generate_report().
+        try:
+            with transaction.atomic():
+                settings_obj = ProgressReportSettings.objects.select_for_update().get(
+                    user=request.user
+                )
+
+                if data["triggered_by"] == "interval" and not settings_obj.is_enabled:
+                    return Response(
+                        {"error": "Interval-based generation is turned off in report settings."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                if settings_obj.last_generated_at:
+                    elapsed = (timezone.now() - settings_obj.last_generated_at).total_seconds()
+                    if elapsed < MIN_SECONDS_BETWEEN_GENERATIONS:
+                        wait_seconds = round(MIN_SECONDS_BETWEEN_GENERATIONS - elapsed)
+                        return Response(
+                            {
+                                "error": f"Please wait {wait_seconds}s before generating another report.",
+                                "retry_after_seconds": wait_seconds,
+                            },
+                            status=status.HTTP_429_TOO_MANY_REQUESTS,
+                        )
+
+                if settings_obj.generation_started_at:
+                    in_progress_for = (timezone.now() - settings_obj.generation_started_at).total_seconds()
+                    if in_progress_for < GENERATION_LOCK_TIMEOUT_SECONDS:
+                        # A generation is already running for this user (e.g. the
+                        # user navigated away and back before it finished, and the
+                        # frontend fired another auto-trigger). last_generated_at
+                        # alone can't catch this since it hasn't updated yet.
+                        wait_seconds = round(GENERATION_LOCK_TIMEOUT_SECONDS - in_progress_for)
+                        return Response(
+                            {
+                                "error": "A report is already being generated -- please wait for it to finish.",
+                                "retry_after_seconds": wait_seconds,
+                            },
+                            status=status.HTTP_429_TOO_MANY_REQUESTS,
+                        )
+
+                settings_obj.generation_started_at = timezone.now()
+                settings_obj.save(update_fields=["generation_started_at"])
+        except DjangoDBError:
+            # SQLite (this project's DB) doesn't give select_for_update()
+            # real row-level blocking the way Postgres does -- under true
+            # concurrent writers here, the "losing" request can hit a raw
+            # "database table is locked" error instead of being cleanly
+            # blocked and then seeing the other request's committed
+            # generation_started_at. Treat that contention itself as proof
+            # a generation is already in flight, rather than letting it
+            # surface as an unhandled 500.
             return Response(
-                {"error": "Interval-based generation is turned off in report settings."},
-                status=status.HTTP_400_BAD_REQUEST,
+                {
+                    "error": "A report is already being generated -- please wait for it to finish.",
+                    "retry_after_seconds": GENERATION_LOCK_TIMEOUT_SECONDS,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
-
-        if settings_obj.last_generated_at:
-            elapsed = (timezone.now() - settings_obj.last_generated_at).total_seconds()
-            if elapsed < MIN_SECONDS_BETWEEN_GENERATIONS:
-                wait_seconds = round(MIN_SECONDS_BETWEEN_GENERATIONS - elapsed)
-                return Response(
-                    {
-                        "error": f"Please wait {wait_seconds}s before generating another report.",
-                        "retry_after_seconds": wait_seconds,
-                    },
-                    status=status.HTTP_429_TOO_MANY_REQUESTS,
-                )
-
-        if settings_obj.generation_started_at:
-            in_progress_for = (timezone.now() - settings_obj.generation_started_at).total_seconds()
-            if in_progress_for < GENERATION_LOCK_TIMEOUT_SECONDS:
-                # A generation is already running for this user (e.g. the
-                # user navigated away and back before it finished, and the
-                # frontend fired another auto-trigger). last_generated_at
-                # alone can't catch this since it hasn't updated yet.
-                wait_seconds = round(GENERATION_LOCK_TIMEOUT_SECONDS - in_progress_for)
-                return Response(
-                    {
-                        "error": "A report is already being generated -- please wait for it to finish.",
-                        "retry_after_seconds": wait_seconds,
-                    },
-                    status=status.HTTP_429_TOO_MANY_REQUESTS,
-                )
 
         period_days = data.get("period_days") or settings_obj.day_interval
         report_type = data.get("report_type") or settings_obj.report_type
@@ -140,10 +178,10 @@ class GenerateReportView(APIView):
         try:
             service = ReportGenerationService()
         except ValueError as exc:
+            settings_obj.generation_started_at = None
+            settings_obj.save(update_fields=["generation_started_at"])
             return Response({"error": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
-        settings_obj.generation_started_at = timezone.now()
-        settings_obj.save(update_fields=["generation_started_at"])
         try:
             report = service.generate_report(
                 user=request.user,

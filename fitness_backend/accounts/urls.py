@@ -1,12 +1,13 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .views import MeView, ProfileView, RegisterView, WeightLogDetailView, WeightLogListCreateView
+from .views import LogoutView, MeView, ProfileView, RegisterView, WeightLogDetailView, WeightLogListCreateView
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
     path("login/", TokenObtainPairView.as_view(), name="login"),
     path("login/refresh/", TokenRefreshView.as_view(), name="login-refresh"),
+    path("logout/", LogoutView.as_view(), name="logout"),
     path("profile/", ProfileView.as_view(), name="profile"),
     path("me/", MeView.as_view(), name="me"),
     path("weight-logs/", WeightLogListCreateView.as_view(), name="weight-log-list"),

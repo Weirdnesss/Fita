@@ -25,36 +25,77 @@ GENERATED_TEMPLATE_ERROR = {
 
 class ExerciseSearchView(APIView):
     """
-    GET /workouts/exercises/search/?q=bench
+    GET /workouts/exercises/search/?q=bench&category=Chest&offset=20
     Searches the local WgerExercise cache -- instant, no external
     call, no rate limits. Run `python manage.py sync_wger_exercises`
     to populate/refresh this cache. If it's empty (never synced),
     this returns an empty list with a hint rather than an error.
+
+    q is optional when category is given, so category-only browsing
+    works the same way nutrition's FoodSearchView supports it.
+    Paginated via `offset` (default 0), page size PAGE_SIZE --
+    response includes `next_offset` (null once there's nothing more
+    to load).
+
+    Results now include description/equipment_name/muscle_names so a
+    client can render a detail view straight from the search response
+    without a second request (mirrors FoodSearchView's shape). This
+    is additive -- the existing TemplateEditor exercise picker
+    (api/workouts.js's searchExercises) only reads `.results` and the
+    fields it already used (wger_exercise_id, name, category) are
+    unchanged, so it keeps working as-is.
     """
+
+    PAGE_SIZE = 20
 
     def get(self, request):
         term = request.query_params.get("q", "").strip()
-        if not term:
-            return Response({"results": []})
+        category = request.query_params.get("category", "").strip()
+
+        if not term and not category:
+            return Response({"count": 0, "results": [], "next_offset": None})
 
         if not WgerExercise.objects.exists():
             return Response(
                 {
+                    "count": 0,
                     "results": [],
+                    "next_offset": None,
                     "hint": "Exercise database is empty. Run: python manage.py sync_wger_exercises",
                 }
             )
 
-        matches = WgerExercise.objects.filter(name__icontains=term)[:15]
+        qs = WgerExercise.objects.all()
+        if term:
+            qs = qs.filter(name__icontains=term)
+        if category:
+            qs = qs.filter(category_name__iexact=category)
+
+        total = qs.count()
+        try:
+            offset = int(request.query_params.get("offset", 0))
+        except (TypeError, ValueError):
+            offset = 0
+        offset = max(offset, 0)
+
+        page = qs[offset : offset + self.PAGE_SIZE]
         results = [
             {
                 "wger_exercise_id": ex.id,
                 "name": ex.name,
+                "description": ex.description,
                 "category": ex.category_name,
+                "equipment": ex.equipment_name,
+                "muscles": ex.muscle_names,
             }
-            for ex in matches
+            for ex in page
         ]
-        return Response({"results": results})
+        next_offset = offset + self.PAGE_SIZE
+        return Response({
+            "count": total,
+            "results": results,
+            "next_offset": next_offset if next_offset < total else None,
+        })
 
 
 class WorkoutTemplateListCreateView(generics.ListCreateAPIView):

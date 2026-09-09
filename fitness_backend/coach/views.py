@@ -1,3 +1,5 @@
+import logging
+
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.response import Response
@@ -10,6 +12,8 @@ from .serializers import (
     SendMessageSerializer,
 )
 from .services.llm_service import LLMService
+
+logger = logging.getLogger(__name__)
 
 
 class ChatListCreateView(generics.ListCreateAPIView):
@@ -61,9 +65,13 @@ class SendMessageView(APIView):
         try:
             llm_service = LLMService()
             reply_text = llm_service.get_response(chat)
-        except Exception as exc:
+        except Exception:
+            # Full detail (which can include config errors like a
+            # missing GROQ_API_KEY, or raw SDK/network exceptions) goes
+            # to the server log only -- never back to the client.
+            logger.exception("LLM service call failed for chat %s", chat_id)
             return Response(
-                {"error": f"Assistant is unavailable right now: {exc}"},
+                {"error": "Assistant is unavailable right now. Please try again shortly."},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 

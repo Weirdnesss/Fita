@@ -5,6 +5,7 @@ page shows, in a form the user can save or share outside the app.
 """
 
 import io
+from xml.sax.saxutils import escape as _xml_escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -23,7 +24,16 @@ _BULLET = ParagraphStyle("Bullet", parent=_styles["BodyText"], leading=15)
 
 def _section(title, body_text):
     """One narrative field -- a heading plus its paragraph, or a bulleted
-    list if the text is newline-separated (key_takeaways)."""
+    list if the text is newline-separated (key_takeaways).
+
+    body_text is LLM-generated free text, not developer-authored markup --
+    it's escaped before going into Paragraph() (which parses a real,
+    if small, XML-like markup language) so a stray '<b>' or other
+    tag-shaped fragment in the model's output can't raise a parse error
+    and crash PDF export. <br/> is reinserted for line breaks *after*
+    escaping, so it still renders as an actual line break, not literal
+    text.
+    """
     if not body_text:
         return []
     flow = [Paragraph(title, _HEADING)]
@@ -31,13 +41,13 @@ def _section(title, body_text):
     if len(lines) > 1:
         flow.append(
             ListFlowable(
-                [ListItem(Paragraph(line, _BULLET)) for line in lines],
+                [ListItem(Paragraph(_xml_escape(line), _BULLET)) for line in lines],
                 bulletType="bullet",
                 leftIndent=14,
             )
         )
     else:
-        flow.append(Paragraph(body_text.replace("\n", "<br/>"), _BODY))
+        flow.append(Paragraph(_xml_escape(body_text).replace("\n", "<br/>"), _BODY))
     return flow
 
 
@@ -77,7 +87,8 @@ def build_report_pdf(report):
                 [
                     ListItem(
                         Paragraph(
-                            f"<b>[{rec.get('priority', '').upper()}]</b> {rec.get('recommendation', '')}",
+                            f"<b>[{_xml_escape(rec.get('priority', '').upper())}]</b> "
+                            f"{_xml_escape(rec.get('recommendation', ''))}",
                             _BULLET,
                         )
                     )

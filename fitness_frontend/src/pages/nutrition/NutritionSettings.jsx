@@ -36,6 +36,7 @@ export default function NutritionSettings() {
     current_weight_kg: "", height_ft: "", height_in: "", date_of_birth: "", gender: "",
   });
   const [suggestion, setSuggestion] = useState(null);
+  const [showCalcDetails, setShowCalcDetails] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [calcError, setCalcError] = useState("");
 
@@ -47,6 +48,7 @@ export default function NutritionSettings() {
     setCalculating(true);
     setCalcError("");
     setSuggestion(null);
+    setShowCalcDetails(false);
     try {
       const result = await getSuggestedGoals();
       setSuggestion(result);
@@ -78,6 +80,7 @@ export default function NutritionSettings() {
       await updateProfile(payload);
       const result = await getSuggestedGoals();
       setSuggestion(result);
+      setShowCalcDetails(false);
       setMissingFields(null);
     } catch (err) {
       setCalcError(extractErrorMessage(err));
@@ -216,9 +219,20 @@ export default function NutritionSettings() {
               <SuggestionBox label="Carbs" value={`${suggestion.carbs_g}g`} />
               <SuggestionBox label="Fat" value={`${suggestion.fat_g}g`} />
             </div>
-            <p style={{ fontSize: 11, color: "var(--text-faint)" }}>
-              BMR {suggestion.bmr} kcal · TDEE {suggestion.tdee} kcal
+            <p style={{ fontSize: 12, color: "var(--text-dim)" }}>
+              Based on your resting energy needs and activity level.
             </p>
+            <button
+              onClick={() => setShowCalcDetails((s) => !s)}
+              style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 11, padding: 0, textAlign: "left" }}
+            >
+              {showCalcDetails ? "Hide" : "Show"} calculation details
+            </button>
+            {showCalcDetails && (
+              <p style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                BMR (calories your body burns at rest): {suggestion.bmr} kcal · TDEE (BMR plus your activity level): {suggestion.tdee} kcal
+              </p>
+            )}
             {suggestion.assumptions.map((a, i) => (
               <p key={i} style={{ fontSize: 11, color: "var(--turmeric)" }}>{a}</p>
             ))}

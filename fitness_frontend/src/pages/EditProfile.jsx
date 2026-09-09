@@ -120,43 +120,22 @@ export default function EditProfile() {
             </select>
           </div>
           <div>
-            <label>Current weight</label>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "var(--bg-raised)", borderRadius: "var(--radius-sm)", fontSize: 14 }}>
-              <span>{user?.profile?.current_weight_kg != null ? `${user.profile.current_weight_kg} kg` : "Not logged yet"}</span>
-              <button type="button" className="btn-ghost" style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 13, padding: 0 }} onClick={() => navigate("/profile")}>
-                Log weight
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div style={row2}>
-          <div>
-            <label>Goal weight</label>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "var(--bg-raised)", borderRadius: "var(--radius-sm)", fontSize: 14 }}>
-              <span>{user?.profile?.goal_weight_kg != null ? `${user.profile.goal_weight_kg} kg` : "Not set"}</span>
-              <button type="button" className="btn-ghost" style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 13, padding: 0 }} onClick={() => navigate("/profile")}>
-                Change
-              </button>
-            </div>
-          </div>
-          <div>
-            <label>Height (ft)</label>
-            <input type="number" value={form.heightFt} onChange={set("heightFt")} />
-          </div>
-        </div>
-
-        <div style={row2}>
-          <div>
-            <label>Height (in)</label>
-            <input type="number" value={form.heightIn} onChange={set("heightIn")} />
-          </div>
-          <div>
             <label>Primary goal</label>
             <select value={form.primaryGoal} onChange={set("primaryGoal")}>
               <option value="">Select</option>
               {GOALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
+          </div>
+        </div>
+
+        <div style={row2}>
+          <div>
+            <label>Height (ft)</label>
+            <input type="number" value={form.heightFt} onChange={set("heightFt")} />
+          </div>
+          <div>
+            <label>Height (in)</label>
+            <input type="number" value={form.heightIn} onChange={set("heightIn")} />
           </div>
         </div>
 

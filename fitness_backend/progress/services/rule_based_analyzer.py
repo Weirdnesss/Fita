@@ -54,12 +54,22 @@ class RuleBasedAnalyzer:
                 "type": "warning", "category": "calories",
                 "message": f"Calorie intake is about {deficit} kcal/day below target.",
             })
-        elif adherence["calories"] > 110:
-            surplus = round(data["averages"]["calories"] - data["goals"]["calories"], 0)
-            insights.append({
-                "type": "warning", "category": "calories",
-                "message": f"Calorie intake is about {surplus} kcal/day above target.",
-            })
+        else:
+            # adherence["calories"] is capped at 100 by design (it also
+            # feeds the "overall adherence" score, where an overeating day
+            # shouldn't count as *more* than fully met) -- so it can never
+            # exceed 110 and can't be used to detect overeating. Compute
+            # the raw, uncapped ratio here instead, just for this check.
+            goal_calories = data["goals"]["calories"]
+            calorie_ratio = (
+                (data["averages"]["calories"] / goal_calories) * 100 if goal_calories else 0
+            )
+            if calorie_ratio > 110:
+                surplus = round(data["averages"]["calories"] - goal_calories, 0)
+                insights.append({
+                    "type": "warning", "category": "calories",
+                    "message": f"Calorie intake is about {surplus} kcal/day above target.",
+                })
 
         tracking_rate = round((data["total_days_tracked"] / data["period_days"]) * 100, 0) if data["period_days"] else 0
         if tracking_rate < 70:

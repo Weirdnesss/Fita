@@ -8,7 +8,7 @@ import { Loading } from "../components/Status";
 export default function ProfilePage() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
-  const [showSettings, setShowSettings] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   if (loading) return <div className="page"><Loading /></div>;
   if (!user) return null;
@@ -23,50 +23,61 @@ export default function ProfilePage() {
 
   return (
     <div className="page">
-      <PageHeader
-        title="Profile"
-        action={
-          <button className="btn-ghost" style={{ background: "none", border: "none", padding: 6 }} onClick={() => setShowSettings((s) => !s)} aria-label="Menu">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
-          </button>
-        }
-      />
-
-      {showSettings && (
-        <div className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <button className="btn btn-secondary btn-block" onClick={() => navigate("/profile/edit")}>Edit Profile</button>
-          <button className="btn btn-secondary btn-block" onClick={handleLogout}>Log Out</button>
-        </div>
-      )}
+      <PageHeader title="Profile" />
 
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={avatarStyle}>{initials || "?"}</div>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <h2 style={{ textTransform: "none" }}>{user.first_name} {user.last_name}</h2>
             <p style={{ color: "var(--text-dim)", fontSize: 13 }}>{user.email}</p>
           </div>
+          <button
+            className="btn btn-secondary"
+            style={{ padding: "8px 14px", fontSize: 13, flexShrink: 0 }}
+            onClick={() => navigate("/profile/edit")}
+          >
+            Edit
+          </button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-          <StatBox label="Weight" value={profile.current_weight_kg ?? "--"} unit="kg" />
-          <StatBox label="Goal" value={profile.goal_weight_kg ?? "--"} unit="kg" accent="bamboo" />
-          <StatBox label="BMI" value={profile.bmi ?? "--"} unit="" accent="turmeric" />
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <div style={{ width: "50%" }}>
+            <StatBox label="BMI" value={profile.bmi ?? "--"} unit="" accent="turmeric" />
+          </div>
         </div>
-      </div>
-
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <h3>Details</h3>
-        <DetailRow label="Primary goal" value={formatChoice(profile.primary_goal)} />
-        <DetailRow label="Activity level" value={formatChoice(profile.activity_level)} />
-        <DetailRow label="Height" value={profile.height_cm ? `${profile.height_cm} cm` : "--"} />
-        <DetailRow label="Workout frequency" value={profile.workout_frequency ? `${profile.workout_frequency} / week` : "--"} />
-        <DetailRow label="Workout location" value={formatChoice(profile.workout_location)} />
-        {profile.medical_conditions && <DetailRow label="Medical conditions" value={profile.medical_conditions} />}
-        {profile.food_allergies && <DetailRow label="Food allergies" value={profile.food_allergies} />}
-      </div>
+        </div>
 
       <WeightProgress />
+
+      <div className="card">
+        <button
+          onClick={() => setShowDetails((s) => !s)}
+          style={{ background: "none", border: "none", padding: 0, width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+        >
+          <h3>Details</h3>
+          <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{showDetails ? "Hide" : "Show"}</span>
+        </button>
+        {showDetails && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
+            <DetailRow label="Primary goal" value={formatChoice(profile.primary_goal)} />
+            <DetailRow label="Activity level" value={formatChoice(profile.activity_level)} />
+            <DetailRow label="Height" value={profile.height_cm ? `${profile.height_cm} cm` : "--"} />
+            <DetailRow label="Workout frequency" value={profile.workout_frequency ? `${profile.workout_frequency} / week` : "--"} />
+            <DetailRow label="Workout location" value={formatChoice(profile.workout_location)} />
+            {profile.medical_conditions && <DetailRow label="Medical conditions" value={profile.medical_conditions} />}
+            {profile.food_allergies && <DetailRow label="Food allergies" value={profile.food_allergies} />}
+          </div>
+        )}
+      </div>
+
+      <button
+        className="btn-ghost"
+        style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 13, textAlign: "center", padding: "8px 0" }}
+        onClick={handleLogout}
+      >
+        Log Out
+      </button>
     </div>
   );
 }

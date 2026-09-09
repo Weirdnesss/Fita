@@ -155,8 +155,19 @@ def calculate_goals(profile) -> GoalCalculationResult:
     protein_kcal = protein_g * 4
     fat_kcal = calories * FAT_PCT_OF_CALORIES[goal]
     fat_g = fat_kcal / 9
-    carbs_kcal = max(calories - protein_kcal - fat_kcal, 0)
+    carbs_kcal_raw = calories - protein_kcal - fat_kcal
+    carbs_kcal = max(carbs_kcal_raw, 0)
     carbs_g = carbs_kcal / 4
+    if carbs_kcal_raw < 0:
+        # Protein + fat targets alone exceed the calorie target (can
+        # happen at high protein-per-kg goals combined with a low
+        # calorie target, e.g. high weight + short height + a capped
+        # deficit) -- surface this instead of silently zeroing carbs
+        # out with no explanation.
+        assumptions.append(
+            "Protein and fat targets left no room for carbs at this "
+            "calorie level, so carbs were set to 0g."
+        )
 
     return GoalCalculationResult(
         calories=round(calories),

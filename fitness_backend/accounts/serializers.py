@@ -44,7 +44,6 @@ class ProfileSerializer(serializers.ModelSerializer):
     # a plain editable field.
     current_weight_kg = serializers.ReadOnlyField()
     goal_weight_kg = serializers.FloatField(required=False, allow_null=True, min_value=20, max_value=300)
-    goal_weight_kg = serializers.FloatField(required=False, allow_null=True, min_value=20, max_value=300)
 
     def validate_date_of_birth(self, value):
         if value is None:

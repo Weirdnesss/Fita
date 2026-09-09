@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { useToast } from "../../context/ToastContext";
-import { searchFoods, logFood } from "../../api/nutrition";
+import { searchFoods, logFood, updateFoodEntry } from "../../api/nutrition";
 
 const MEALS = [
   ["breakfast", "Breakfast"],
@@ -39,35 +39,67 @@ export default function FoodSearch() {
   const navigate = useNavigate();
   const location = useLocation();
   const logDate = location.state?.date; // undefined -> backend defaults to today
+  const editingEntryId = location.state?.editingEntryId; // set when swapping a food on an existing entry
+  const editingMealType = location.state?.editingMealType;
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState(null);
-  const [results, setResults] = useState([]);
+    const [results, setResults] = useState([]);
   const [count, setCount] = useState(0);
+  const [nextOffset, setNextOffset] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState(null);
 
+  // Guards against a stale response (from a query/category that's since
+  // changed, e.g. fast-switching categories) landing after a newer one
+  // and clobbering it or getting appended to the wrong result set.
+  const requestIdRef = useRef(0);
+
   useEffect(() => {
     const t = setTimeout(async () => {
+      const requestId = ++requestIdRef.current;
       setLoading(true);
       try {
-        const r = await searchFoods(query, category);
+        const r = await searchFoods(query, category, 0);
+        if (requestId !== requestIdRef.current) return; // superseded
         setResults(r.results);
         setCount(r.count);
+        setNextOffset(r.next_offset);
       } catch (err) {
+        if (requestId !== requestIdRef.current) return;
         setError(extractErrorMessage(err));
       } finally {
-        setLoading(false);
+        if (requestId === requestIdRef.current) setLoading(false);
       }
     }, 300);
     return () => clearTimeout(t);
   }, [query, category]);
+
+  async function handleLoadMore() {
+    if (nextOffset === null || loadingMore) return;
+    const requestId = ++requestIdRef.current;
+    setLoadingMore(true);
+    try {
+      const r = await searchFoods(query, category, nextOffset);
+      if (requestId !== requestIdRef.current) return;
+      setResults((prev) => [...prev, ...r.results]);
+      setNextOffset(r.next_offset);
+    } catch (err) {
+      if (requestId !== requestIdRef.current) return;
+      setError(extractErrorMessage(err));
+    } finally {
+      if (requestId === requestIdRef.current) setLoadingMore(false);
+    }
+  }
 
   if (selected) {
     return (
       <FoodDetail
         food={selected}
         logDate={logDate}
+        editingEntryId={editingEntryId}
+        editingMealType={editingMealType}
         onBack={() => setSelected(null)}
         onLogged={() => navigate("/nutrition")}
       />
@@ -76,7 +108,7 @@ export default function FoodSearch() {
 
   return (
     <div className="page">
-      <PageHeader title="Add Food" back />
+      <PageHeader title={editingEntryId ? "Swap Food" : "Add Food"} back />
       <input autoFocus placeholder="Search for a food (e.g. adobo, rice)" value={query} onChange={(e) => setQuery(e.target.value)} />
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
@@ -96,7 +128,7 @@ export default function FoodSearch() {
       )}
       {!loading && results.length > 0 && count > results.length && (
         <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-          Showing {results.length} of {count} -- narrow your search to see more.
+          Showing {results.length} of {count}
         </p>
       )}
       {results.map((food) => (
@@ -116,6 +148,16 @@ export default function FoodSearch() {
           </div>
         </div>
       ))}
+        {!loading && nextOffset !== null && (
+          <button
+            className="btn btn-secondary btn-block"
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            style={{ marginTop: 4 }}
+          >
+            {loadingMore ? "Loading..." : `Load More (${count - results.length} left)`}
+          </button>
+        )}
     </div>
   );
 }
@@ -134,13 +176,13 @@ function CategoryChip({ active, label, onClick }) {
 
 function VerifiedBadge({ isVerified }) {
   return (
-    <span className={`pill ${isVerified ? "pill-bamboo" : "pill-turmeric"}`} style={{ marginTop: 4 }}>
+    <span className={`pill ${isVerified ? "pill-bamboo" : "pill-neutral"}`} style={{ marginTop: 4 }}>
       {isVerified ? "PhilFCT" : "Estimated"}
     </span>
   );
 }
 
-function FoodDetail({ food, logDate, onBack, onLogged }) {
+function FoodDetail({ food, logDate, editingEntryId, editingMealType, onBack, onLogged }) {
   const showToast = useToast();
   // PhilFCT items are stored per-100g -- let people type grams directly
   // instead of doing "1.5 servings of 100g" math in their head. Estimated
@@ -148,7 +190,7 @@ function FoodDetail({ food, logDate, onBack, onLogged }) {
   const isGramBased = food.serving_description === "100g";
 
   const [amount, setAmount] = useState(isGramBased ? 100 : 1);
-  const [mealType, setMealType] = useState("breakfast");
+  const [mealType, setMealType] = useState(editingMealType || "breakfast");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -165,9 +207,14 @@ function FoodDetail({ food, logDate, onBack, onLogged }) {
     setSaving(true);
     setError("");
     try {
-      await logFood({ foodItemId: food.id, mealType, servings, date: logDate });
       const mealLabel = MEALS.find(([v]) => v === mealType)?.[1] || mealType;
-      showToast(`Added ${food.name} to ${mealLabel}`, "success");
+      if (editingEntryId) {
+        await updateFoodEntry(editingEntryId, { foodItemId: food.id, mealType, servings });
+        showToast(`Swapped to ${food.name}`, "success");
+      } else {
+        await logFood({ foodItemId: food.id, mealType, servings, date: logDate });
+        showToast(`Added ${food.name} to ${mealLabel}`, "success");
+      }
       onLogged();
     } catch (err) {
       setError(extractErrorMessage(err));
@@ -226,7 +273,7 @@ function FoodDetail({ food, logDate, onBack, onLogged }) {
 
       <ErrorBanner message={error} />
       <button className="btn btn-primary btn-block" onClick={handleAdd} disabled={saving || servingsInvalid}>
-        {saving ? "Adding..." : "Add Food"}
+        {saving ? "Saving..." : editingEntryId ? "Swap Food" : "Add Food"}
       </button>
     </div>
   );

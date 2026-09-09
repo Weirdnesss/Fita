@@ -51,7 +51,13 @@ client.interceptors.response.use(
         refreshPromise = axios
           .post(`${BASE_URL}/accounts/login/refresh/`, { refresh: tokens.refresh })
           .then((res) => {
-            setTokens({ ...tokens, access: res.data.access });
+            // The backend rotates refresh tokens on every use and
+            // blacklists the old one (see accounts SIMPLE_JWT settings),
+            // so the response's `refresh` field -- not the one we sent --
+            // is the only one still valid. Keeping the stale `tokens.refresh`
+            // here would make the NEXT refresh attempt fail with
+            // "Token is blacklisted" and force-log the user out.
+            setTokens({ access: res.data.access, refresh: res.data.refresh ?? tokens.refresh });
             return res.data.access;
           })
           .finally(() => {

@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Q, Sum
 
 from accounts.models import Profile
 
@@ -58,17 +59,19 @@ def _validate_meal_type(raw_value):
 
 class FoodSearchView(generics.ListAPIView):
     """
-    GET /nutrition/foods/search/?q=adobo&category=viands_meat
+    GET /nutrition/foods/search/?q=adobo&category=viands_meat&offset=40
     Searches the local FoodItem database -- instant, no external API,
     no rate limits. With no query, lists by category (or everything) so
     the frontend can support category browsing, not just text search.
 
-    Response is wrapped with a `count` of total matches (which may be
-    larger than the returned page) so the UI can show "showing X of Y".
+    Paginated via `offset` (default 0), page size PAGE_SIZE. Response
+    includes `count` (total matches) and `next_offset` (null once
+    there's nothing more to load), so the frontend can drive a
+    "Load More" button without guessing at page math.
     """
 
     serializer_class = FoodItemSerializer
-    RESULT_LIMIT = 40
+    PAGE_SIZE = 40
 
     def get_queryset(self):
         q = self.request.query_params.get("q", "").strip()
@@ -85,9 +88,22 @@ class FoodSearchView(generics.ListAPIView):
     def list(self, request, *args, **kwargs):
         qs = self.get_queryset()
         total = qs.count()
-        page = qs[: self.RESULT_LIMIT]
+
+        try:
+            offset = int(request.query_params.get("offset", 0))
+        except (TypeError, ValueError):
+            offset = 0
+        offset = max(offset, 0)
+
+        page = qs[offset : offset + self.PAGE_SIZE]
         serializer = self.get_serializer(page, many=True)
-        return Response({"count": total, "results": serializer.data})
+        next_offset = offset + self.PAGE_SIZE
+
+        return Response({
+            "count": total,
+            "results": serializer.data,
+            "next_offset": next_offset if next_offset < total else None,
+        })
 
 
 class NutritionProfileView(generics.RetrieveUpdateAPIView):
@@ -177,6 +193,102 @@ class DailyEntryView(APIView):
             )
         return Response(DailyEntrySerializer(daily_entry).data)
 
+class NutritionTrendsView(APIView):
+    """
+    GET /nutrition/trends/?period=week|month
+    Aggregates daily totals over the trailing 7 (week) or 30 (month)
+    days, plus a logging streak and per-macro averages -- feeds the
+    Trends tab's bar chart and streak/averages cards.
+
+    Averages are computed over days that actually have food logged,
+    not every day in the period -- averaging in zero-calorie days the
+    user simply didn't open the app on would understate real intake
+    and isn't useful feedback.
+    """
+
+    PERIOD_DAYS = {"week": 7, "month": 30}
+
+    def get(self, request):
+        period = request.query_params.get("period", "week")
+        num_days = self.PERIOD_DAYS.get(period)
+        if num_days is None:
+            return Response(
+                {"error": f"period must be one of {list(self.PERIOD_DAYS)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        nutrition_profile, _ = NutritionProfile.objects.get_or_create(user=request.user)
+        today = timezone.localdate()
+        start_date = today - timezone.timedelta(days=num_days - 1)
+
+        totals_by_date = {
+            row["daily_entry__date"]: row
+            for row in (
+                FoodEntry.objects.filter(
+                    daily_entry__nutrition_profile=nutrition_profile,
+                    daily_entry__date__gte=start_date,
+                    daily_entry__date__lte=today,
+                )
+                .values("daily_entry__date")
+                .annotate(
+                    calories=Sum("calories"),
+                    protein_g=Sum("protein_g"),
+                    carbs_g=Sum("carbs_g"),
+                    fat_g=Sum("fat_g"),
+                )
+            )
+        }
+
+        days = []
+        for i in range(num_days):
+            d = start_date + timezone.timedelta(days=i)
+            row = totals_by_date.get(d)
+            days.append({
+                "date": d.isoformat(),
+                "calories": row["calories"] if row else 0,
+                "protein_g": row["protein_g"] if row else 0,
+                "carbs_g": row["carbs_g"] if row else 0,
+                "fat_g": row["fat_g"] if row else 0,
+                "logged": row is not None,
+            })
+
+        logged_days = [d for d in days if d["logged"]]
+        days_logged = len(logged_days)
+
+        def avg(field):
+            return round(sum(d[field] for d in logged_days) / days_logged, 1) if days_logged else 0
+
+        return Response({
+            "period": period,
+            "days": days,
+            "days_logged": days_logged,
+            "averages": {
+                "calories": avg("calories"),
+                "protein_g": avg("protein_g"),
+                "carbs_g": avg("carbs_g"),
+                "fat_g": avg("fat_g"),
+            },
+            "current_streak": self._current_streak(nutrition_profile, today),
+        })
+
+    def _current_streak(self, nutrition_profile, today):
+        # Consecutive days with at least one food entry, walking backward
+        # from today. If today has nothing logged yet, start counting
+        # from yesterday instead -- today isn't "over" yet, so not having
+        # logged breakfast by 9am shouldn't zero out an otherwise-intact
+        # streak.
+        logged_dates = set(
+            DailyEntry.objects.filter(nutrition_profile=nutrition_profile, food_entries__isnull=False)
+            .distinct()
+            .values_list("date", flat=True)
+        )
+        cursor = today if today in logged_dates else today - timezone.timedelta(days=1)
+        streak = 0
+        while cursor in logged_dates:
+            streak += 1
+            cursor -= timezone.timedelta(days=1)
+        return streak
+
 
 class FoodEntryCreateView(APIView):
     """
@@ -249,11 +361,10 @@ class FoodEntryDetailView(generics.GenericAPIView):
     PATCH /nutrition/entries/<id>/  -- edit servings and/or meal_type.
     DELETE /nutrition/entries/<id>/ -- remove entirely, no date restriction.
 
-    Editing only touches servings/meal_type, never which food_item or
-    date the entry belongs to -- swapping the food or moving it to a
-    different day is different enough from "fixing a typo" that
-    delete-and-re-add (which already exists, and already applies the
-    backdating rules correctly) is the right tool for that instead.
+    Editing supports servings, meal_type, food_item (swap), and date
+    (move to a different day). A food_item/date change moves the entry
+    onto the correct DailyEntry and re-snapshots calories/macros against
+    the new food_item and/or servings.
 
     Editing is subject to the same MAX_BACKDATE_DAYS window as creating
     a new entry: quietly inflating an old entry's servings has the same
@@ -283,15 +394,54 @@ class FoodEntryDetailView(generics.GenericAPIView):
             if error:
                 return error
             entry.meal_type = meal_type
+
         if "servings" in request.data:
             servings, error = _validate_servings(request.data["servings"])
             if error:
                 return error
             entry.servings = servings
 
-        # FoodEntry.save() only snapshots calories/macros on first create
-        # (by design, so later corrections to FoodItem data don't rewrite
-        # history) -- so an edit here has to recompute the snapshot itself.
+        if "food_item" in request.data:
+            entry.food_item = get_object_or_404(FoodItem, id=request.data["food_item"])
+
+        if "date" in request.data:
+            try:
+                new_date = timezone.datetime.strptime(request.data["date"], "%Y-%m-%d").date()
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "date must be in YYYY-MM-DD format"}, status=status.HTTP_400_BAD_REQUEST
+                )
+
+            today = timezone.localdate()
+            if new_date > today:
+                return Response(
+                    {"error": "Can't move a food entry to a future date."}, status=status.HTTP_400_BAD_REQUEST
+                )
+            if new_date < oldest_allowed:
+                return Response(
+                    {
+                        "error": f"Food can only be logged for the last {MAX_BACKDATE_DAYS} days.",
+                        "oldest_allowed_date": oldest_allowed.isoformat(),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if new_date != entry_date:
+                # Move the entry to a (possibly new) DailyEntry for the
+                # target date, rather than mutating a date field on
+                # FoodEntry directly -- DailyEntry is the actual grouping
+                # unit everything else (totals, reports) reads from. An
+                # old DailyEntry left with zero food_entries is harmless:
+                # data_collection_service already only counts days with
+                # actual food_entries as "tracked".
+                new_daily_entry, _ = DailyEntry.objects.get_or_create(
+                    nutrition_profile=entry.daily_entry.nutrition_profile, date=new_date
+                )
+                entry.daily_entry = new_daily_entry
+
+        # Recompute the snapshot unconditionally -- food_item and/or
+        # servings may have changed, and recomputing is cheap enough that
+        # tracking exactly which fields changed isn't worth it.
         entry.calories = entry.food_item.calories * entry.servings
         entry.protein_g = entry.food_item.protein_g * entry.servings
         entry.carbs_g = entry.food_item.carbs_g * entry.servings

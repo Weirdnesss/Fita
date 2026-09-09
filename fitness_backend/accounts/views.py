@@ -1,6 +1,8 @@
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Profile, WeightLog
 from .serializers import AccountSerializer, ProfileSerializer, RegisterSerializer, WeightLogSerializer
@@ -11,6 +13,35 @@ class RegisterView(generics.CreateAPIView):
 
     permission_classes = [permissions.AllowAny]
     serializer_class = RegisterSerializer
+
+
+class LogoutView(APIView):
+    """
+    POST /accounts/logout/  {"refresh": "<refresh token>"}
+    Blacklists the given refresh token so it can't be used again --
+    without this, ROTATE_REFRESH_TOKENS only issues a new token on use,
+    it doesn't revoke the old one, and there was previously no way to
+    revoke a token server-side at all (the frontend could only delete
+    its local copy). Requires rest_framework_simplejwt.token_blacklist
+    in INSTALLED_APPS and BLACKLIST_AFTER_ROTATION=True (see settings.py).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        refresh = request.data.get("refresh")
+        if not refresh:
+            return Response(
+                {"error": "refresh token is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            RefreshToken(refresh).blacklist()
+        except TokenError:
+            # Already invalid/expired/blacklisted -- logout's end state is
+            # "this token can't be used," which is already true, so treat
+            # it as success rather than surfacing an error for this.
+            pass
+        return Response(status=status.HTTP_205_RESET_CONTENT)
 
 
 class ProfileView(generics.RetrieveUpdateAPIView):

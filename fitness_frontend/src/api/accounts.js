@@ -1,4 +1,4 @@
-import { client, setTokens, clearTokens } from "./client";
+import { client, getTokens, setTokens, clearTokens } from "./client";
 
 export async function register({ email, firstName, lastName, password, confirmPassword }) {
   const { data } = await client.post("/accounts/register/", {
@@ -17,8 +17,21 @@ export async function login({ email, password }) {
   return data;
 }
 
-export function logout() {
-  clearTokens();
+export async function logout() {
+  // Blacklist the refresh token server-side so it can't be reused (e.g.
+  // if it leaked) even though it's still within its 7-day lifetime.
+  // Best-effort: still clear local tokens even if this call fails (e.g.
+  // offline, token already expired) so the user is logged out either way.
+  const tokens = getTokens();
+  try {
+    if (tokens?.refresh) {
+      await client.post("/accounts/logout/", { refresh: tokens.refresh });
+    }
+  } catch {
+    // ignored -- see comment above
+  } finally {
+    clearTokens();
+  }
 }
 
 export async function getMe() {
