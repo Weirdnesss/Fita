@@ -25,6 +25,8 @@ import ReportsList from "./pages/progress/ReportsList";
 import ReportDetail from "./pages/progress/ReportDetail";
 import ReportSettings from "./pages/progress/ReportSettings";
 
+import ResourcesList from "./pages/resources/ResourcesList";
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -60,6 +62,8 @@ export default function App() {
               <Route path="/progress" element={<ReportsList />} />
               <Route path="/progress/settings" element={<ReportSettings />} />
               <Route path="/progress/:id" element={<ReportDetail />} />
+
+              <Route path="/resources" element={<ResourcesList />} />
             </Route>
 
             <Route path="/" element={<Navigate to="/profile" replace />} />

@@ -6,6 +6,7 @@ const TABS = [
   { to: "/coach", label: "Assistant", icon: AssistantIcon },
   { to: "/nutrition", label: "Nutrition", icon: NutritionIcon },
   { to: "/progress", label: "Progress", icon: ProgressIcon },
+  { to: "/resources", label: "Resources", icon: ResourcesIcon },
 ];
 
 export default function BottomNav() {
@@ -96,6 +97,14 @@ function ProgressIcon() {
   return (
     <svg {...iconProps()}>
       <path d="M4 20V10M12 20V4M20 20v-6" />
+    </svg>
+  );
+}
+function ResourcesIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M4 4.5A2.5 2.5 0 016.5 2H20v17H6.5A2.5 2.5 0 004 21.5v-17z" />
+      <path d="M4 19a2.5 2.5 0 012.5-2.5H20" />
     </svg>
   );
 }
