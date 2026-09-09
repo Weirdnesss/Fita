@@ -123,7 +123,7 @@ export default function EditProfile() {
             <label>Current weight</label>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "var(--bg-raised)", borderRadius: "var(--radius-sm)", fontSize: 14 }}>
               <span>{user?.profile?.current_weight_kg != null ? `${user.profile.current_weight_kg} kg` : "Not logged yet"}</span>
-              <button type="button" className="btn-ghost" style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 13, padding: 0 }} onClick={() => navigate("/profile/weight")}>
+              <button type="button" className="btn-ghost" style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 13, padding: 0 }} onClick={() => navigate("/profile")}>
                 Log weight
               </button>
             </div>
@@ -135,7 +135,7 @@ export default function EditProfile() {
             <label>Goal weight</label>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "var(--bg-raised)", borderRadius: "var(--radius-sm)", fontSize: 14 }}>
               <span>{user?.profile?.goal_weight_kg != null ? `${user.profile.goal_weight_kg} kg` : "Not set"}</span>
-              <button type="button" className="btn-ghost" style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 13, padding: 0 }} onClick={() => navigate("/profile/weight")}>
+              <button type="button" className="btn-ghost" style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 13, padding: 0 }} onClick={() => navigate("/profile")}>
                 Change
               </button>
             </div>

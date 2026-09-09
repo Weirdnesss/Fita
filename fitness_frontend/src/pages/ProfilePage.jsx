@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
+import WeightProgress from "../components/WeightProgress";
 import { Loading } from "../components/Status";
 
 export default function ProfilePage() {
@@ -48,8 +49,8 @@ export default function ProfilePage() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-          <StatBox label="Weight" value={profile.current_weight_kg ?? "--"} unit="kg" onClick={() => navigate("/profile/weight")} />
-          <StatBox label="Goal" value={profile.goal_weight_kg ?? "--"} unit="kg" accent="bamboo" onClick={() => navigate("/profile/weight")} />
+          <StatBox label="Weight" value={profile.current_weight_kg ?? "--"} unit="kg" />
+          <StatBox label="Goal" value={profile.goal_weight_kg ?? "--"} unit="kg" accent="bamboo" />
           <StatBox label="BMI" value={profile.bmi ?? "--"} unit="" accent="turmeric" />
         </div>
       </div>
@@ -64,6 +65,8 @@ export default function ProfilePage() {
         {profile.medical_conditions && <DetailRow label="Medical conditions" value={profile.medical_conditions} />}
         {profile.food_allergies && <DetailRow label="Food allergies" value={profile.food_allergies} />}
       </div>
+
+      <WeightProgress />
     </div>
   );
 }
