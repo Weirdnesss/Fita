@@ -1,4 +1,5 @@
 from datetime import timedelta
+import logging
 
 from django.db import Error as DjangoDBError
 from django.db import transaction
@@ -18,6 +19,8 @@ from .serializers import (
 )
 from .services.pdf_export import build_report_pdf
 from .services.report_generation_service import ReportGenerationService
+
+logger = logging.getLogger(__name__)
 
 # A short spam guard, NOT the user's day_interval schedule -- day_interval
 # is a preference for how often they *want* a report, and hard-blocking on
@@ -178,9 +181,16 @@ class GenerateReportView(APIView):
         try:
             service = ReportGenerationService()
         except ValueError as exc:
+            # str(exc) here is the config-error message from the service
+            # constructor (e.g. naming the GROQ_API_KEY env var) -- log it
+            # server-side, don't hand that detail to the client.
+            logger.exception("ReportGenerationService failed to initialize")
             settings_obj.generation_started_at = None
             settings_obj.save(update_fields=["generation_started_at"])
-            return Response({"error": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response(
+                {"error": "Report generation is unavailable right now. Please try again shortly."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         try:
             report = service.generate_report(

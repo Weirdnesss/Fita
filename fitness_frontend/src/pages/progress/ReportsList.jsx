@@ -6,8 +6,6 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 import { listReports, generateReport, deleteReport, getReportSettings } from "../../api/progress";
 
-const AUTO_GEN_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes
-
 export default function ReportsList() {
   const navigate = useNavigate();
   const showToast = useToast();
@@ -50,12 +48,9 @@ export default function ReportsList() {
     if (settings.due_status !== "due") return;
     const sessionKey = `progress_auto_gen_tried_${settings.last_generated_at || "never"}`;
     if (sessionStorage.getItem(sessionKey)) return;
-
-    const backoffUntil = Number(sessionStorage.getItem("progress_auto_gen_backoff_until") || 0);
-    if (Date.now() < backoffUntil) return;
-
     autoTriedRef.current = true;
-    runIntervalGeneration(sessionKey);
+    sessionStorage.setItem(sessionKey, "1");
+    runIntervalGeneration();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
@@ -67,27 +62,20 @@ export default function ReportsList() {
     getReportSettings().then(setSettings).catch(() => {}); // due-banner is a nice-to-have, fail silently
   }
 
-  async function runIntervalGeneration(sessionKey) {
+  async function runIntervalGeneration() {
     setAutoGenerating(true);
     try {
       const report = await generateReport({ triggeredBy: "interval" });
       if (report.status === "failed") {
-        // Failed, but don't mark this generation as "tried" permanently --
-        // back off for 5 minutes instead, so it can retry on a later visit
-        // rather than staying silently blocked for the rest of the session.
-        sessionStorage.setItem("progress_auto_gen_backoff_until", String(Date.now() + AUTO_GEN_BACKOFF_MS));
-        showToast("Automatic report generation failed -- will retry later", "error");
+        // Quiet failure -- the user didn't ask for this one, so don't
+        // interrupt them with an error banner over it.
         return;
       }
-      // Only permanently suppress retries for this last_generated_at once we
-      // actually succeed.
-      sessionStorage.setItem(sessionKey, "1");
       showToast("New interval report generated", "success");
       load();
       refreshSettings();
     } catch {
-      sessionStorage.setItem("progress_auto_gen_backoff_until", String(Date.now() + AUTO_GEN_BACKOFF_MS));
-      showToast("Automatic report generation failed -- will retry later", "error");
+      // Same reasoning -- fail silently for an automatic trigger.
     } finally {
       setAutoGenerating(false);
     }
@@ -109,7 +97,7 @@ export default function ReportsList() {
       if (err.response?.status === 429) {
         setCooldown(err.response.data.retry_after_seconds || 60);
       }
-      setError(extractErrorMessage(err, "Couldn't generate a report -- check GROQ_API_KEY and that you have logged data."));
+      setError(extractErrorMessage(err, "Couldn't generate a report -- check your connection and that you have logged data."));
     } finally {
       setGenerating(false);
       load();

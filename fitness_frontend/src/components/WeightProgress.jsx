@@ -131,7 +131,9 @@ export default function WeightProgress() {
             Log at least 2 entries to see a trend graph.
           </p>
         )}
-        {logs !== null && logs.length >= 2 && <WeightChart logs={logs} goalWeightKg={currentGoal} />}
+        {logs !== null && logs.length >= 2 && (
+          <WeightChart logs={logs} goalWeightKg={currentGoal} primaryGoal={user?.profile?.primary_goal} />
+        )}
       </div>
 
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -194,7 +196,19 @@ export default function WeightProgress() {
 // optional dashed reference line for goal weight. `logs` comes in
 // most-recent-first (the API's default ordering), so it's reversed
 // here to plot left-to-right chronologically.
-function WeightChart({ logs, goalWeightKg }) {
+// Which direction of weight change counts as "good" depends on the
+// user's actual goal -- losing weight is progress for lose_weight, but
+// it's the opposite of progress for gain_weight/gain_muscle. Mirrors
+// accounts.models.PrimaryGoal on the backend. maintain_weight and
+// build_strength aren't about weight direction at all, so neither
+// direction is colored as good/bad for those (or if the goal isn't set).
+function goalWeightDirection(primaryGoal) {
+  if (primaryGoal === "lose_weight") return "down";
+  if (primaryGoal === "gain_weight" || primaryGoal === "gain_muscle") return "up";
+  return null;
+}
+
+function WeightChart({ logs, goalWeightKg, primaryGoal }) {
   const width = 320;
   const height = 150;
   const padding = { top: 14, right: 14, bottom: 20, left: 14 };
@@ -225,6 +239,9 @@ function WeightChart({ logs, goalWeightKg }) {
   const latest = chronological[chronological.length - 1];
   const first = chronological[0];
   const change = Math.round((latest.weight_kg - first.weight_kg) * 10) / 10;
+  const direction = goalWeightDirection(primaryGoal);
+  const isGoodChange = change === 0 ? null : direction === "down" ? change < 0 : direction === "up" ? change > 0 : null;
+  const changeColor = isGoodChange === null ? "var(--text)" : isGoodChange ? "var(--bamboo)" : "var(--chili)";
 
   return (
     <div>
@@ -246,7 +263,7 @@ function WeightChart({ logs, goalWeightKg }) {
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12, color: "var(--text-faint)" }}>
         <span>Latest: <strong style={{ color: "var(--text)" }}>{latest.weight_kg} kg</strong></span>
         <span>
-          Change: <strong style={{ color: change < 0 ? "var(--bamboo)" : change > 0 ? "var(--chili)" : "var(--text)" }}>
+          Change: <strong style={{ color: changeColor }}>
             {change > 0 ? "+" : ""}{change} kg
           </strong>
         </span>

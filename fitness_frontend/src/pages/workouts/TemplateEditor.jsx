@@ -377,22 +377,29 @@ function GeneratedExerciseRow({ exercise, active, swapping, onToggle, onSwap }) 
 function ExerciseSearch({ onAdd, onClose }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
+  const [hint, setHint] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (query.trim().length < 2) {
       setResults([]);
+      setHint(null);
       return;
     }
     const t = setTimeout(async () => {
       setLoading(true);
       setError("");
       try {
-        const r = await searchExercises(query);
+        const { results: r, hint: h } = await searchExercises(query);
         setResults(r);
+        setHint(h);
       } catch (err) {
-        setError("Couldn't search exercises. Has the exercise database been synced yet? Run: python manage.py sync_wger_exercises");
+        // A real failure here is a connection/server problem -- the
+        // "database not synced" case is signaled separately via `hint`
+        // on a successful (200) response, never via this catch, so
+        // this message shouldn't reference it.
+        setError("Couldn't search exercises. Check your connection and try again.");
       } finally {
         setLoading(false);
       }
@@ -406,7 +413,10 @@ function ExerciseSearch({ onAdd, onClose }) {
       <input autoFocus placeholder="Search for an exercise" value={query} onChange={(e) => setQuery(e.target.value)} />
       {loading && <Loading label="Searching" />}
       <ErrorBanner message={error} />
-      {!loading && query.length >= 2 && results.length === 0 && !error && (
+      {hint && !loading && (
+        <p style={{ color: "var(--text-faint)", fontSize: 13 }}>{hint}</p>
+      )}
+      {!loading && !hint && query.length >= 2 && results.length === 0 && !error && (
         <p style={{ color: "var(--text-faint)", fontSize: 13 }}>No exercises found for "{query}".</p>
       )}
       {results.map((ex) => (

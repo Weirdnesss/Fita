@@ -12,14 +12,10 @@ export function lbToKg(lb) {
 
 export async function searchExercises(query) {
   const { data } = await client.get("/workouts/exercises/search/", { params: { q: query } });
-  return data.results;
-}
-
-export async function searchExercisesPaged(query, category, offset = 0) {
-  const { data } = await client.get("/workouts/exercises/search/", {
-    params: { q: query, category, offset },
-  });
-  return data; // { count, results, next_offset, hint? }
+  // hint is only ever present alongside an empty results array (see
+  // ExerciseSearchView) -- surfaced separately so the UI can show it
+  // instead of a plain "no results" message.
+  return { results: data.results, hint: data.hint || null };
 }
 
 export async function listTemplates() {

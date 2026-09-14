@@ -59,7 +59,7 @@ export default function ChatDetail() {
         ],
       }));
     } catch (err) {
-      setError(extractErrorMessage(err, "The assistant is unavailable right now -- check your GROQ_API_KEY / connection."));
+      setError(extractErrorMessage(err, "Couldn't reach the assistant -- check your connection and try again."));
       // Don't roll back the optimistic message: the backend saves the
       // user's message before attempting the LLM call, so it's genuinely
       // persisted even though generation failed. Hiding it here would

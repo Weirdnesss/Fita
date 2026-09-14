@@ -16,8 +16,8 @@ export default function ProfilePage() {
   const profile = user.profile || {};
   const initials = `${user.first_name?.[0] || ""}${user.last_name?.[0] || ""}`.toUpperCase();
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await logout();
     navigate("/login");
   }
 

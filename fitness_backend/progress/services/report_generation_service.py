@@ -9,6 +9,7 @@ Ties together the hybrid progress-report pipeline:
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from openai import OpenAI
 from coach.services.data_collection_service import DataCollectionService
 from progress.models import ProgressReport, ProgressReportSettings, ReportStatus
 from progress.services.rule_based_analyzer import RuleBasedAnalyzer
+
+logger = logging.getLogger(__name__)
 
 PROMPT_FILE = Path(__file__).resolve().parent.parent / "prompts" / "report_prompt.txt"
 DEFAULT_MODEL = "openai/gpt-oss-120b"
@@ -94,8 +97,16 @@ class ReportGenerationService:
             return report
 
         except Exception as exc:
+            # str(exc) can include raw SDK/network error text (and, in a
+            # missing-config case, an API key env var name) -- log the
+            # real detail server-side only, and store a generic message
+            # in generation_error since that field is serialized straight
+            # out to the client via ProgressReportSerializer and shown as
+            # report-level UI text (see ReportsList.jsx), not just kept
+            # for admin/debugging use.
+            logger.exception("Report generation failed for report %s", report.id)
             report.status = ReportStatus.FAILED
-            report.generation_error = str(exc)
+            report.generation_error = "Report generation failed. Please try again shortly."
             report.save()
             return report
 

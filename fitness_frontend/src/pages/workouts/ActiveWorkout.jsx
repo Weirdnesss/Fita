@@ -45,6 +45,30 @@ export default function ActiveWorkout() {
             ? saved.logs[ex.id]
             : Array.from({ length: ex.target_sets }, () => ({ weight: "", reps: "", done: false }));
         });
+
+        // If there was a saved session with actual logged data, but NONE
+        // of its exercise ids exist on the template anymore, that's not
+        // "a couple exercises changed" -- it means the whole routine was
+        // regenerated/reshuffled since this session was left in
+        // progress (regeneration deletes and recreates every
+        // TemplateExercise row, even for exercises that get picked
+        // again, so ids never survive a reshuffle). The merge above
+        // would otherwise just silently produce empty rows with no
+        // indication anything was lost.
+        if (saved?.logs) {
+          const currentIds = new Set(t.exercises.map((ex) => ex.id));
+          const savedEntries = Object.entries(saved.logs);
+          const hadLoggedData = savedEntries.some(([, sets]) =>
+            sets.some((s) => s.done || s.weight !== "" || s.reps !== "")
+          );
+          const anyStillPresent = savedEntries.some(([exId]) => currentIds.has(Number(exId)));
+          if (hadLoggedData && savedEntries.length > 0 && !anyStillPresent) {
+            setError(
+              "This routine was regenerated since you last worked on it, so your previously logged sets couldn't be matched to the new exercises and weren't restored."
+            );
+          }
+        }
+
         setLogs(merged);
         setNote(saved?.note || "");
         startedAtRef.current = saved?.startedAt || new Date().toISOString();
