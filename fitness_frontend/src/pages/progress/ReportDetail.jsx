@@ -29,7 +29,7 @@ export default function ReportDetail() {
 
   if (!report) {
     return (
-      <div className="page">
+      <div className="page report-detail">
         <PageHeader title="Loading" back />
         <ErrorBanner message={error} />
         {!error && <Loading />}

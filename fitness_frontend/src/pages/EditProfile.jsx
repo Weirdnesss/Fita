@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { updateProfile } from "../api/accounts";
 import PageHeader from "../components/PageHeader";
 import { ErrorBanner, extractErrorMessage } from "../components/Status";
+import { useToast } from "../context/ToastContext";
 
 const GENDERS = [
   ["male", "Male"],
@@ -58,6 +59,7 @@ function initialFormFrom(profile) {
 export default function EditProfile() {
   const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const showToast = useToast();
   const [form, setForm] = useState(() => initialFormFrom(user?.profile || {}));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -84,6 +86,7 @@ export default function EditProfile() {
       // So /profile shows the new values immediately instead of the
       // stale copy AuthContext loaded at login/last refresh.
       await refreshUser();
+      showToast("Profile updated", "success");
       navigate("/profile");
     } catch (err) {
       setError(extractErrorMessage(err, "Couldn't save. Check your details."));

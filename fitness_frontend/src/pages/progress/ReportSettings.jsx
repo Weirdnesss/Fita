@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { getReportSettings, updateReportSettings } from "../../api/progress";
+import { useToast } from "../../context/ToastContext";
 
 export default function ReportSettings() {
   const navigate = useNavigate();
+  const showToast = useToast();
   const [settings, setSettings] = useState(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -24,6 +26,7 @@ export default function ReportSettings() {
         is_enabled: settings.is_enabled,
       });
       setSettings(updated);
+      showToast("Report settings saved", "success");
       navigate("/progress");
     } catch (err) {
       setError(extractErrorMessage(err));

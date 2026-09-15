@@ -44,9 +44,9 @@ export default function ChatList() {
 
   return (
     <div className="page">
-      <PageHeader title="Fitness Assistant" subtitle="Get personalized recommendations" />
+      <PageHeader title="Fitness Assistant" subtitle="Chat for explanations and recommendations" />
       <ErrorBanner message={error} />
-      <button className="btn btn-primary btn-block" onClick={handleNewChat} disabled={creating}>
+      <button className="btn btn-primary chat-new-button" onClick={handleNewChat} disabled={creating}>
         {creating ? "Starting..." : "+ New Chat"}
       </button>
 
@@ -59,6 +59,7 @@ export default function ChatList() {
         {chats?.length === 0 && (
           <EmptyState title="No chats yet" eyebrow="Start a new chat to get personalized fitness recommendations." />
         )}
+        <div className="chat-list-grid">
         {chats?.map((c) => (
           <div key={c.id} className="card card-tab" style={{ marginBottom: 10, cursor: "pointer" }} onClick={() => navigate(`/coach/${c.id}`)}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -73,6 +74,7 @@ export default function ChatList() {
             <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{new Date(c.updated_at).toLocaleString()}</p>
           </div>
         ))}
+        </div>
       </div>
 
       <ConfirmDialog

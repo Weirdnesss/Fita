@@ -18,6 +18,13 @@ export async function searchExercises(query) {
   return { results: data.results, hint: data.hint || null };
 }
 
+export async function searchExercisesPaged(query, category, offset = 0) {
+  const { data } = await client.get("/workouts/exercises/search/", {
+    params: { q: query, category, offset },
+  });
+  return data; // { count, results, next_offset, hint? }
+}
+
 export async function listTemplates() {
   const { data } = await client.get("/workouts/templates/");
   return data;

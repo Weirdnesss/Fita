@@ -146,8 +146,9 @@ function ExercisesTab() {
       {!loading && results.length > 0 && count > results.length && (
         <p style={{ fontSize: 12, color: "var(--text-faint)" }}>Showing {results.length} of {count}</p>
       )}
-      {results.map((ex) => (
-        <div key={ex.wger_exercise_id} className="card" style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => setSelected(ex)}>
+      <div className="resource-results-grid">
+        {results.map((ex) => (
+          <div key={ex.wger_exercise_id} className="card" style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => setSelected(ex)}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
             <p style={{ fontWeight: 600 }}>{ex.name}</p>
             {ex.category && <span className="pill pill-neutral" style={{ flexShrink: 0 }}>{ex.category}</span>}
@@ -155,6 +156,8 @@ function ExercisesTab() {
           {ex.muscles && <p style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 4 }}>{ex.muscles}</p>}
         </div>
       ))}
+      </div>
+
       {!loading && nextOffset !== null && (
         <button className="btn btn-secondary btn-block" onClick={handleLoadMore} disabled={loadingMore}>
           {loadingMore ? "Loading..." : `Load More (${count - results.length} left)`}
@@ -272,6 +275,7 @@ function FoodTab() {
       {!loading && results.length > 0 && count > results.length && (
         <p style={{ fontSize: 12, color: "var(--text-faint)" }}>Showing {results.length} of {count}</p>
       )}
+      <div className="resource-results-grid">
       {results.map((food) => (
         <div key={food.id} className="card" style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => setSelected(food)}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -291,6 +295,7 @@ function FoodTab() {
           </div>
         </div>
       ))}
+      </div>
       {!loading && nextOffset !== null && (
         <button className="btn btn-secondary btn-block" onClick={handleLoadMore} disabled={loadingMore}>
           {loadingMore ? "Loading..." : `Load More (${count - results.length} left)`}
@@ -386,6 +391,7 @@ function ArticlesTab() {
       {resources?.length === 0 && (
         <EmptyState title="No articles yet" eyebrow="Nothing here yet -- check back later" />
       )}
+      <div className="resource-results-grid">
       {resources?.map((r) => (
         <a
           key={r.id}
@@ -405,6 +411,7 @@ function ArticlesTab() {
           {r.source && <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{r.source}</p>}
         </a>
       ))}
+      </div>
     </>
   );
 }

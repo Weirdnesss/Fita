@@ -3,11 +3,14 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { createTemplate, getTemplate, updateTemplate, addExerciseToTemplate, removeExerciseFromTemplate, updateTemplateExercise, swapTemplateExercise, searchExercises } from "../../api/workouts";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import { useToast } from "../../context/ToastContext";
 
 export default function TemplateEditor() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const showToast = useToast();
 
   const [template, setTemplate] = useState(null);
   const [title, setTitle] = useState("New Template");
@@ -17,6 +20,8 @@ export default function TemplateEditor() {
   const [showSearch, setShowSearch] = useState(false);
   const [swapTargetId, setSwapTargetId] = useState(null);
   const [swappingId, setSwappingId] = useState(null);
+  const [pendingRemove, setPendingRemove] = useState(null); // { id, name } | null
+  const [confirmingBack, setConfirmingBack] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -54,13 +59,15 @@ export default function TemplateEditor() {
     setShowSearch(false);
   }
 
-  async function handleRemoveExercise(exerciseId, exerciseName) {
-    if (!window.confirm(`Remove "${exerciseName}" from this routine?`)) return;
+  async function confirmRemoveExercise() {
+    const { id: exerciseId, name } = pendingRemove;
+    setPendingRemove(null);
     try {
       const updated = await removeExerciseFromTemplate(template.id, exerciseId);
       setTemplate(updated);
+      showToast(`Removed ${name}`, "success");
     } catch (err) {
-      setError(extractErrorMessage(err, "Couldn't remove that exercise."));
+      showToast(extractErrorMessage(err, "Couldn't remove that exercise."), "error");
     }
   }
 
@@ -103,6 +110,7 @@ export default function TemplateEditor() {
     try {
       const updated = await swapTemplateExercise(template.id, exerciseId, reason);
       setTemplate(updated);
+      showToast("Exercise swapped", "success");
       setSwapTargetId(null);
     } catch (err) {
       setError(extractErrorMessage(err, "Couldn't find a replacement exercise."));
@@ -121,6 +129,7 @@ export default function TemplateEditor() {
       } else {
         await createTemplate({ title: effectiveTitle, kind });
       }
+      showToast("Routine saved", "success");
       navigate("/workouts");
     } catch (err) {
       setError(extractErrorMessage(err, "Couldn't save. Check your connection."));
@@ -130,14 +139,11 @@ export default function TemplateEditor() {
   }
 
   function handleBack() {
-    // Every field except the title saves immediately on change (add/remove
-    // exercise, target sets, weight unit), so leaving never loses those.
-    // The title is the one exception -- it's only local state until Save
-    // is clicked -- so only warn when there's an actual unsaved rename on
-    // an already-persisted template. A never-saved draft has nothing to
-    // lose by design (see the draft-mode comment above).
+    // Same reasoning as before: only the title can be unsaved when
+    // leaving, since every other field saves immediately on change.
     const hasUnsavedTitle = template.id && title.trim() && title.trim() !== template.title;
-    if (hasUnsavedTitle && !window.confirm("Discard the unsaved routine name change?")) {
+    if (hasUnsavedTitle) {
+      setConfirmingBack(true);
       return;
     }
     navigate("/workouts");
@@ -161,6 +167,7 @@ export default function TemplateEditor() {
             const persisted = await ensureTemplatePersisted();
             const updated = await addExerciseToTemplate(persisted.id, { wgerExerciseId });
             handleExerciseAdded(updated);
+            showToast("Exercise added", "success");
           } catch (err) {
             setError(extractErrorMessage(err, "Couldn't add that exercise. Check your connection."));
           }
@@ -256,8 +263,7 @@ export default function TemplateEditor() {
               <button
                 className="btn-ghost"
                 style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 12 }}
-                onClick={() => handleRemoveExercise(ex.id, ex.exercise_name)}
-              >
+                onClick={() => setPendingRemove({ id: ex.id, name: ex.exercise_name })}              >
                 Remove
               </button>
             </div>
@@ -326,6 +332,23 @@ export default function TemplateEditor() {
           + Add Exercise
         </button>
       </div>
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        title="Remove exercise"
+        message={pendingRemove ? `Remove "${pendingRemove.name}" from this routine?` : ""}
+        confirmLabel="Remove"
+        onConfirm={confirmRemoveExercise}
+        onCancel={() => setPendingRemove(null)}
+      />
+      <ConfirmDialog
+        open={confirmingBack}
+        title="Discard changes"
+        message="Discard the unsaved routine name change?"
+        confirmLabel="Discard"
+        onConfirm={() => { setConfirmingBack(false); navigate("/workouts"); }}
+        onCancel={() => setConfirmingBack(false)}
+      />
     </div>
   );
 }

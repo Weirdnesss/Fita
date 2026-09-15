@@ -157,23 +157,25 @@ export default function NutritionDashboard() {
           ›
         </button>
       </div>
-
-      <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-        <CalorieRing pct={pct} isOver={isOverCalories} />
-        <div style={{ textAlign: "center" }}>
-          <div className="stat-lg" style={isOverCalories ? { color: "var(--chili)" } : undefined}>
-            {isOverCalories ? `+${Math.abs(remaining)}` : remaining}
+      
+      <div className="nutrition-top-section">
+        <div className="card nutrition-summary-card" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+          <CalorieRing pct={pct} isOver={isOverCalories} />
+          <div style={{ textAlign: "center" }}>
+            <div className="stat-lg" style={isOverCalories ? { color: "var(--chili)" } : undefined}>
+              {isOverCalories ? `+${Math.abs(remaining)}` : remaining}
+            </div>
+            <div className="eyebrow">{isOverCalories ? "Over goal" : "Remaining kcal"}</div>
           </div>
-          <div className="eyebrow">{isOverCalories ? "Over goal" : "Remaining kcal"}</div>
-        </div>
-        <div style={{ display: "flex", gap: 24 }}>
-          <MacroStat label="Consumed" value={`${consumed} kcal`} color="chili" />
-          <MacroStat label="Goal" value={`${goal} kcal`} color="bamboo" />
-        </div>
-        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
-          <MacroProgress label="Protein" consumed={daily.total_protein} goal={goals.daily_protein_goal} />
-          <MacroProgress label="Carbs" consumed={daily.total_carbs} goal={goals.daily_carbs_goal} />
-          <MacroProgress label="Fat" consumed={daily.total_fat} goal={goals.daily_fat_goal} />
+          <div style={{ display: "flex", gap: 24 }}>
+            <MacroStat label="Consumed" value={`${consumed} kcal`} color="chili" />
+            <MacroStat label="Goal" value={`${goal} kcal`} color="bamboo" />
+          </div>
+          <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+            <MacroProgress label="Protein" consumed={daily.total_protein} goal={goals.daily_protein_goal} />
+            <MacroProgress label="Carbs" consumed={daily.total_carbs} goal={goals.daily_carbs_goal} />
+            <MacroProgress label="Fat" consumed={daily.total_fat} goal={goals.daily_fat_goal} />
+          </div>
         </div>
       </div>
 
@@ -182,9 +184,29 @@ export default function NutritionDashboard() {
           <h3>Food Entries</h3>
           <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{formatDayLabel(selectedDate)}</span>
         </div>
+
+        <div className="nutrition-actions" style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-secondary" onClick={() => navigate("/nutrition/trends")}>
+            Trends
+          </button>
+          {isWithinLogWindow ? (
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate("/nutrition/search", { state: { date: selectedDate } })}>
+              Add Food
+            </button>
+          ) : (
+            <p style={{ flex: 1, fontSize: 12, color: "var(--text-faint)", display: "flex", alignItems: "center" }}>
+              Logging is only available for the last {MAX_BACKDATE_DAYS} days.
+            </p>
+          )}
+          <button className="btn btn-secondary" onClick={() => navigate("/nutrition/settings")}>
+            Goals
+          </button>
+        </div>
+
         {daily.food_entries.length === 0 && (
           <EmptyState title="Nothing logged yet" eyebrow={`Nothing added for ${formatDayLabel(selectedDate).toLowerCase()}`} />
         )}
+        <div className="nutrition-meals-grid">
         {daily.food_entries.length > 0 && MEALS.map(([key, label]) => (
           <div key={key} className="card" style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
@@ -266,23 +288,8 @@ export default function NutritionDashboard() {
               </div>
             ))}
           </div>
+          
         ))}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary" onClick={() => navigate("/nutrition/trends")}>
-            Trends
-          </button>
-          {isWithinLogWindow ? (
-            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate("/nutrition/search", { state: { date: selectedDate } })}>
-              Add Food
-            </button>
-          ) : (
-            <p style={{ flex: 1, fontSize: 12, color: "var(--text-faint)", display: "flex", alignItems: "center" }}>
-              Logging is only available for the last {MAX_BACKDATE_DAYS} days.
-            </p>
-          )}
-          <button className="btn btn-secondary" onClick={() => navigate("/nutrition/settings")}>
-            Goals
-          </button>
         </div>
       </div>
 

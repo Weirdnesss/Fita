@@ -14,6 +14,7 @@ import WorkoutsDashboard from "./pages/workouts/WorkoutsDashboard";
 import TemplateEditor from "./pages/workouts/TemplateEditor";
 import ActiveWorkout from "./pages/workouts/ActiveWorkout";
 import HistoryDetail from "./pages/workouts/HistoryDetail";
+import HistoryList from "./pages/workouts/HistoryList";
 
 import NutritionDashboard from "./pages/nutrition/NutritionDashboard";
 import FoodSearch from "./pages/nutrition/FoodSearch";
@@ -54,6 +55,7 @@ export default function App() {
               <Route path="/workouts/templates/:id" element={<TemplateEditor />} />
               <Route path="/workouts/templates/:id/start" element={<ActiveWorkout />} />
               <Route path="/workouts/history/:id" element={<HistoryDetail />} />
+              <Route path="/workouts/history" element={<HistoryList />} />
 
               <Route path="/nutrition" element={<NutritionDashboard />} />
               <Route path="/nutrition/search" element={<FoodSearch />} />

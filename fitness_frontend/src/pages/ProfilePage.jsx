@@ -4,19 +4,24 @@ import { useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import WeightProgress from "../components/WeightProgress";
 import { Loading } from "../components/Status";
+import ConfirmDialog from "../components/ConfirmDialog";
+import { isProfileIncomplete } from "../lib/profile";
 
 export default function ProfilePage() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const [showDetails, setShowDetails] = useState(false);
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
 
   if (loading) return <div className="page"><Loading /></div>;
   if (!user) return null;
 
   const profile = user.profile || {};
   const initials = `${user.first_name?.[0] || ""}${user.last_name?.[0] || ""}`.toUpperCase();
+  const incomplete = isProfileIncomplete(profile);
 
-  async function handleLogout() {
+   async function confirmLogout() {
+    setConfirmingLogout(false);
     await logout();
     navigate("/login");
   }
@@ -25,7 +30,22 @@ export default function ProfilePage() {
     <div className="page">
       <PageHeader title="Profile" />
 
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {incomplete && (
+        <div className="card" style={{ background: "var(--chili-tint)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 13, color: "var(--chili)" }}>
+            Finish setting up your profile so goals and routines can be personalized for you.
+          </span>
+          <button
+            className="btn btn-primary"
+            style={{ padding: "8px 14px", fontSize: 13, flexShrink: 0 }}
+            onClick={() => navigate("/profile/edit")}
+          >
+            Finish
+          </button>
+        </div>
+      )}
+
+      <div className="card profile-card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={avatarStyle}>{initials || "?"}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -74,10 +94,19 @@ export default function ProfilePage() {
       <button
         className="btn-ghost"
         style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 13, textAlign: "center", padding: "8px 0" }}
-        onClick={handleLogout}
+        onClick={() => setConfirmingLogout(true)}
       >
         Log Out
       </button>
+
+      <ConfirmDialog
+        open={confirmingLogout}
+        title="Log out"
+        message="You'll need to sign back in to access your account. Continue?"
+        confirmLabel="Log Out"
+        onConfirm={confirmLogout}
+        onCancel={() => setConfirmingLogout(false)}
+      />
     </div>
   );
 }

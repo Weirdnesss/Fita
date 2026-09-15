@@ -3,11 +3,13 @@ import { useAuth } from "../context/AuthContext";
 import { logWeight, listWeightLogs, deleteWeightLog, updateProfile } from "../api/accounts";
 import PageHeader from "../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../components/Status";
+import { useToast } from "../context/ToastContext";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
 export default function WeightLog() {
   const { user, refreshUser } = useAuth();
+  const showToast = useToast();
   const [logs, setLogs] = useState(null);
   const [weightKg, setWeightKg] = useState("");
   const [loggedAt, setLoggedAt] = useState(todayStr());
@@ -44,6 +46,7 @@ export default function WeightLog() {
       // So Profile / Edit Profile show the new current_weight_kg
       // immediately instead of the stale copy AuthContext last loaded.
       await refreshUser();
+      showToast("Weight logged", "success");
     } catch (err) {
       setError(extractErrorMessage(err, "Couldn't log that weight."));
     } finally {
@@ -58,6 +61,7 @@ export default function WeightLog() {
       await deleteWeightLog(id);
       await load();
       await refreshUser();
+      showToast("Entry removed", "success");
     } catch (err) {
       setError(extractErrorMessage(err, "Couldn't delete that entry."));
     } finally {
@@ -71,7 +75,9 @@ export default function WeightLog() {
     try {
       await updateProfile({ goal_weight_kg: goalWeightKg !== "" ? Number(goalWeightKg) : null });
       await refreshUser();
+      showToast("Goal weight updated", "success");
       setEditingGoal(false);
+      
     } catch (err) {
       setError(extractErrorMessage(err, "Couldn't update goal weight."));
     } finally {

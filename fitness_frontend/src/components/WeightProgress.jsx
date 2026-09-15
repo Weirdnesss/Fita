@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { logWeight, listWeightLogs, deleteWeightLog, updateProfile } from "../api/accounts";
 import { Loading, ErrorBanner, extractErrorMessage } from "./Status";
+import ConfirmDialog from "./ConfirmDialog";
+import { useToast } from "../context/ToastContext";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
@@ -10,6 +12,7 @@ const todayStr = () => new Date().toISOString().split("T")[0];
 // here as one section rather than a separate page/route.
 export default function WeightProgress() {
   const { user, refreshUser } = useAuth();
+  const showToast = useToast();
   const [logs, setLogs] = useState(null);
   const [weightKg, setWeightKg] = useState("");
   const [loggedAt, setLoggedAt] = useState(todayStr());
@@ -17,6 +20,7 @@ export default function WeightProgress() {
   const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null); // { id, weightKg } | null
 
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalWeightKg, setGoalWeightKg] = useState(user?.profile?.goal_weight_kg ?? "");
@@ -47,6 +51,7 @@ export default function WeightProgress() {
       // So the rest of the Profile page (and anywhere else user.profile
       // is read) shows the new current_weight_kg immediately.
       await refreshUser();
+      showToast("Weight logged", "success");
     } catch (err) {
       setError(extractErrorMessage(err, "Couldn't log that weight."));
     } finally {
@@ -54,15 +59,18 @@ export default function WeightProgress() {
     }
   }
 
-  async function handleDelete(id) {
+  async function confirmDelete() {
+    const { id, weightKg } = pendingDelete;
+    setPendingDelete(null);
     setDeletingId(id);
     setError("");
     try {
       await deleteWeightLog(id);
       await load();
       await refreshUser();
+      showToast(`Removed ${weightKg} kg entry`, "success");
     } catch (err) {
-      setError(extractErrorMessage(err, "Couldn't delete that entry."));
+      showToast(extractErrorMessage(err, "Couldn't delete that entry."), "error");
     } finally {
       setDeletingId(null);
     }
@@ -74,6 +82,7 @@ export default function WeightProgress() {
     try {
       await updateProfile({ goal_weight_kg: goalWeightKg !== "" ? Number(goalWeightKg) : null });
       await refreshUser();
+      showToast("Goal weight updated", "success");
       setEditingGoal(false);
     } catch (err) {
       setError(extractErrorMessage(err, "Couldn't update goal weight."));
@@ -85,7 +94,7 @@ export default function WeightProgress() {
   const currentGoal = user?.profile?.goal_weight_kg ?? null;
 
   return (
-    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="card weight-progress-card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <h3>Weight Progress</h3>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -176,7 +185,7 @@ export default function WeightProgress() {
                 <button
                   className="btn-ghost"
                   style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 12, padding: 6 }}
-                  onClick={() => handleDelete(entry.id)}
+                  onClick={() => setPendingDelete({ id: entry.id, weightKg: entry.weight_kg })}
                   disabled={deletingId === entry.id}
                 >
                   {deletingId === entry.id ? "Removing..." : "Remove"}
@@ -186,6 +195,14 @@ export default function WeightProgress() {
           </div>
         )}
       </div>
+        <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Remove entry"
+        message={pendingDelete ? `Remove the ${pendingDelete.weightKg} kg entry? This can't be undone.` : ""}
+        confirmLabel="Remove"
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

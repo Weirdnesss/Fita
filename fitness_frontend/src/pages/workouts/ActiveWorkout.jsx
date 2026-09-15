@@ -3,6 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { getTemplate, finishWorkout, lbToKg } from "../../api/workouts";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import { useToast } from "../../context/ToastContext";
 
 function sessionKey(templateId) {
   return `active_workout_${templateId}`;
@@ -12,12 +14,15 @@ export default function ActiveWorkout() {
   const { id } = useParams();
   const navigate = useNavigate();
   const startedAtRef = useRef(null);
+  const showToast = useToast();
 
   const [template, setTemplate] = useState(null);
   const [logs, setLogs] = useState({}); // exerciseId -> [{weight, reps, done}]
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [finishing, setFinishing] = useState(false);
+  const [pendingRemoveSet, setPendingRemoveSet] = useState(null); // { exId, setIndex, exerciseName } | null
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   useEffect(() => {
     getTemplate(id)
@@ -126,25 +131,36 @@ export default function ActiveWorkout() {
     }));
   }
 
-  function removeSet(exId, setIndex) {
-    const set = logs[exId][setIndex];
-    const hasData = set.done || set.weight !== "" || set.reps !== "";
-    if (hasData && !window.confirm("Remove this set? Logged data will be lost.")) {
-      return;
-    }
+  function doRemoveSet(exId, setIndex) {
     setLogs((prev) => ({
       ...prev,
       [exId]: prev[exId].filter((_, i) => i !== setIndex),
     }));
   }
 
-  function handleCancel() {
-    const hasProgress = Object.values(logs).some((sets) => sets.some((s) => s.done));
-    if (hasProgress && !window.confirm("Discard this workout? Logged sets will be lost.")) {
+  function removeSet(exId, setIndex) {
+    const set = logs[exId][setIndex];
+    const hasData = set.done || set.weight !== "" || set.reps !== "";
+    if (!hasData) {
+      doRemoveSet(exId, setIndex);
       return;
     }
+    const exerciseName = template.exercises.find((ex) => ex.id === exId)?.exercise_name || "this exercise";
+    setPendingRemoveSet({ exId, setIndex, exerciseName });
+  }
+
+  function doDiscardWorkout() {
     sessionStorage.removeItem(sessionKey(id));
     navigate("/workouts");
+  }
+
+  function handleCancel() {
+    const hasProgress = Object.values(logs).some((sets) => sets.some((s) => s.done || s.weight !== "" || s.reps !== ""));
+    if (!hasProgress) {
+      doDiscardWorkout();
+      return;
+    }
+    setConfirmingCancel(true);
   }
 
   async function handleFinish() {
@@ -195,6 +211,7 @@ export default function ActiveWorkout() {
         note: note.trim(),
       });
       sessionStorage.removeItem(sessionKey(id));
+      showToast("Workout logged", "success");
       navigate("/workouts");
     } catch (err) {
       setError(extractErrorMessage(err));
@@ -218,7 +235,7 @@ export default function ActiveWorkout() {
       <PageHeader
         title={template.title}
         back
-        backTo="/workouts"
+        onBack={handleCancel}
         action={
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 13, background: "none", border: "1px solid var(--border)", color: "var(--text-dim)" }} onClick={handleCancel} disabled={finishing}>
@@ -319,6 +336,26 @@ export default function ActiveWorkout() {
           style={{ width: "100%", padding: "10px 12px", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
         />
       </div>
+
+      <ConfirmDialog
+        open={pendingRemoveSet !== null}
+        title="Remove set"
+        message={pendingRemoveSet ? `Remove this set of ${pendingRemoveSet.exerciseName}? Logged data will be lost.` : ""}
+        confirmLabel="Remove"
+        onConfirm={() => {
+          doRemoveSet(pendingRemoveSet.exId, pendingRemoveSet.setIndex);
+          setPendingRemoveSet(null);
+        }}
+        onCancel={() => setPendingRemoveSet(null)}
+      />
+      <ConfirmDialog
+        open={confirmingCancel}
+        title="Discard workout"
+        message="Discard this workout? Logged sets will be lost."
+        confirmLabel="Discard"
+        onConfirm={() => { setConfirmingCancel(false); doDiscardWorkout(); }}
+        onCancel={() => setConfirmingCancel(false)}
+      />
     </div>
   );
 }

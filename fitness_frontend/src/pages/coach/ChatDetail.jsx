@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { getChat, sendMessage } from "../../api/coach";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function ChatDetail() {
   const { id } = useParams();
@@ -83,7 +85,7 @@ export default function ChatDetail() {
   }
 
   return (
-    <div className="page" style={{ paddingBottom: "calc(var(--nav-height) + 90px)" }}>
+    <div className="page chat-detail" style={{ paddingBottom: "calc(var(--nav-height) + 90px)" }}>
       <PageHeader title={chat.title} back />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -106,7 +108,7 @@ export default function ChatDetail() {
 
       <ErrorBanner message={error} />
 
-      <form onSubmit={handleSend} style={composerStyle}>
+      <form onSubmit={handleSend} className="chat-composer" style={composerStyle}>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -126,6 +128,7 @@ function MessageBubble({ role, content, pending, noReply }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start" }}>
       <div
+        className={isUser ? undefined : "chat-markdown"}
         style={{
           maxWidth: "82%",
           padding: "10px 14px",
@@ -134,11 +137,11 @@ function MessageBubble({ role, content, pending, noReply }) {
           color: isUser ? "#fff" : "var(--text)",
           fontSize: 14,
           lineHeight: 1.5,
-          whiteSpace: "pre-wrap",
+          whiteSpace: isUser ? "pre-wrap" : "normal",
           opacity: pending ? 0.6 : 1,
         }}
       >
-        {content}
+        {isUser ? content : <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>}
       </div>
       {noReply && (
         <p style={{ fontSize: 11, color: "var(--chili)", marginTop: 4 }}>
@@ -160,5 +163,5 @@ const composerStyle = {
   gap: 8,
   padding: "10px 16px",
   background: "var(--bg)",
-  borderTop: "1px solid var(--border-soft)",
+  border: "1px solid var(--border-soft)",
 };

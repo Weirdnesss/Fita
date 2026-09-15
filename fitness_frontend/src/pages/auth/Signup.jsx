@@ -68,6 +68,7 @@ export default function Signup() {
     e.preventDefault();
     setError("");
     setSubmitting(true);
+    let registered = false;
     try {
       await register({
         email: form.email,
@@ -76,11 +77,21 @@ export default function Signup() {
         password: form.password,
         confirmPassword: form.confirmPassword,
       });
+      registered = true;
       // Log in immediately so Steps 2 & 3 can PATCH the profile.
       await login({ email: form.email, password: form.password });
       setStep(2);
     } catch (err) {
-      setError(extractErrorMessage(err, "Couldn't create your account. Check your details."));
+      if (registered) {
+        // The account WAS created -- it's the immediate login right
+        // after that failed (e.g. a transient network blip), not
+        // registration itself. Saying "couldn't create your account"
+        // here is wrong, and retrying this form would now fail with a
+        // duplicate-email error instead of fixing anything.
+        setError("Your account was created, but we couldn't sign you in automatically. Please use the Log In page.");
+      } else {
+        setError(extractErrorMessage(err, "Couldn't create your account. Check your details."));
+      }
     } finally {
       setSubmitting(false);
     }

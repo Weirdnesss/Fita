@@ -91,6 +91,7 @@ export default function ReportsList() {
       if (report.status === "failed") {
         setError(report.generation_error || "Report generation failed.");
       } else {
+        showToast("Report generated", "success");
         navigate(`/progress/${report.id}`);
       }
     } catch (err) {
@@ -146,7 +147,7 @@ export default function ReportsList() {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8 }}>
+      <div className="progress-actions" style={{ display: "flex", gap: 8 }}>
         <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleGenerate} disabled={generating || cooldown > 0}>
           {generating ? "Generating..." : cooldown > 0 ? `Wait ${cooldown}s` : "Generate New Report"}
         </button>
@@ -157,8 +158,14 @@ export default function ReportsList() {
 
       {reports === null && <Loading />}
       {reports?.length === 0 && <EmptyState title="No reports yet" eyebrow="Generate your first one above" />}
-      {reports?.map((r) => (
-        <div key={r.id} className="card card-tab" style={{ marginBottom: 10, cursor: "pointer" }} onClick={() => navigate(`/progress/${r.id}`)}>
+        <div className="report-list-grid">
+          {reports?.map((r) => (
+            <div
+              key={r.id}
+              className="card card-tab"
+              style={{ marginBottom: 10, cursor: "pointer" }}
+              onClick={() => navigate(`/progress/${r.id}`)}
+            >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
             <p style={{ fontWeight: 600 }}>Report #{r.report_number}</p>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -182,6 +189,7 @@ export default function ReportsList() {
           )}
         </div>
       ))}
+      </div>
 
       <ConfirmDialog
         open={pendingDelete !== null}
