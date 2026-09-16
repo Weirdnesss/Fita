@@ -218,7 +218,7 @@ export default function TemplateEditor() {
   }
 
   return (
-    <div className="page">
+    <div className="page template-editor">
       <PageHeader
         title="Edit Routine"
         back

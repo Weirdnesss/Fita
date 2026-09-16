@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { logWeight, listWeightLogs, deleteWeightLog, updateProfile } from "../api/accounts";
 import { Loading, ErrorBanner, extractErrorMessage } from "./Status";
+import WeightField from "./WeightField";
 import ConfirmDialog from "./ConfirmDialog";
 import { useToast } from "../context/ToastContext";
 
@@ -117,18 +118,22 @@ export default function WeightProgress() {
         )}
       </div>
       {editingGoal && (
-        <div style={{ display: "flex", gap: 8, marginTop: -8 }}>
-          <input
-            type="number" step="0.1" autoFocus placeholder="e.g. 75"
-            value={goalWeightKg} onChange={(e) => setGoalWeightKg(e.target.value)}
-            style={{ flex: 1 }}
+        <div style={{ marginTop: -8 }}>
+          <WeightField
+            autoFocus
+            label="Goal weight"
+            kg={goalWeightKg}
+            onChange={setGoalWeightKg}
+            placeholder="e.g. 75"
           />
-          <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleSaveGoal} disabled={savingGoal}>
-            {savingGoal ? "Saving..." : "Save"}
-          </button>
-          <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => setEditingGoal(false)} disabled={savingGoal}>
-            Cancel
-          </button>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={handleSaveGoal} disabled={savingGoal}>
+              {savingGoal ? "Saving..." : "Save"}
+            </button>
+            <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={() => setEditingGoal(false)} disabled={savingGoal}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -148,8 +153,13 @@ export default function WeightProgress() {
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div>
-            <label>Weight (kg)</label>
-            <input type="number" step="0.1" required value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="e.g. 78.5" />
+            <WeightField
+              required
+              label="Weight"
+              kg={weightKg}
+              onChange={setWeightKg}
+              placeholder="e.g. 78.5"
+            />
           </div>
           <div>
             <label>Date</label>

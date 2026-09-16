@@ -64,12 +64,21 @@ Exercise search (`/workouts/new` → Add Exercise) also needs real
 internet access to reach wger.de — same caveat as noted in the backend
 README.
 
+## PWA support
+Implemented via `vite-plugin-pwa` (see `vite.config.js`):
+- Web app manifest (name, icons, `standalone` display, theme color) so
+  the app is installable on mobile/desktop.
+- A generated service worker with `NetworkFirst` caching for API calls
+  (`/accounts`, `/workouts`, `/nutrition`, `/coach`, `/progress`) and
+  `navigateFallback` so a hard refresh on a deep route (e.g.
+  `/workouts/templates/3`) still serves the cached app shell offline.
+- `devOptions.enabled: true` lets you test the service worker under
+  `npm run dev`, not just a production build -- open DevTools →
+  Application → Service Workers to confirm it's registered.
+- `useOnlineStatus.js` + `Status.jsx` surface connectivity state in the UI.
+
 ## Known simplifications worth knowing about
 
-- No offline/service-worker support yet (the PWA requirement) — this is
-  a plain SPA. Adding a service worker via `vite-plugin-pwa` is a
-  reasonable next step if you want true offline support for your
-  evaluation.
 - Optimistic chat UI rolls back cleanly on failure, but there's no
   retry/resend button yet — the user has to retype.
 - No image uploads (before/after pictures mentioned in the Account

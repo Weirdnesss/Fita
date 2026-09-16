@@ -26,32 +26,34 @@ export default function Login() {
   }
 
   return (
-    <div className="page" style={{ justifyContent: "center", gap: 28 }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: 32, color: "var(--chili)" }}>
-          FITNESS ASSISTANT
+    <div className="auth-page">
+      <div className="auth-card">
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 32, color: "var(--chili)" }}>
+            FITNESS ASSISTANT
+          </div>
+          <p style={{ color: "var(--text-dim)", marginTop: 4 }}>Your personal fitness assistant</p>
         </div>
-        <p style={{ color: "var(--text-dim)", marginTop: 4 }}>Your personal fitness assistant</p>
+
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label htmlFor="email">Email</label>
+            <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+          </div>
+          <div>
+            <label htmlFor="password">Password</label>
+            <input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+          </div>
+          <ErrorBanner message={error} />
+          <button className="btn btn-primary btn-block" type="submit" disabled={submitting}>
+            {submitting ? "Signing in..." : "Log In"}
+          </button>
+        </form>
+
+        <p style={{ textAlign: "center", color: "var(--text-dim)", fontSize: 14 }}>
+          Don't have an account? <Link to="/signup" style={{ color: "var(--chili)", fontWeight: 600 }}>Sign up</Link>
+        </p>
       </div>
-
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <div>
-          <label htmlFor="email">Email</label>
-          <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-        </div>
-        <div>
-          <label htmlFor="password">Password</label>
-          <input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
-        </div>
-        <ErrorBanner message={error} />
-        <button className="btn btn-primary btn-block" type="submit" disabled={submitting}>
-          {submitting ? "Signing in..." : "Log In"}
-        </button>
-      </form>
-
-      <p style={{ textAlign: "center", color: "var(--text-dim)", fontSize: 14 }}>
-        Don't have an account? <Link to="/signup" style={{ color: "var(--chili)", fontWeight: 600 }}>Sign up</Link>
-      </p>
     </div>
   );
 }

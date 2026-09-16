@@ -45,50 +45,56 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <div className="card profile-card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={avatarStyle}>{initials || "?"}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 style={{ textTransform: "none" }}>{user.first_name} {user.last_name}</h2>
-            <p style={{ color: "var(--text-dim)", fontSize: 13 }}>{user.email}</p>
+      <div className="profile-grid">
+        <div className="profile-col-left">
+          <div className="card profile-card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={avatarStyle}>{initials || "?"}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h2 style={{ textTransform: "none" }}>{user.first_name} {user.last_name}</h2>
+                <p style={{ color: "var(--text-dim)", fontSize: 13 }}>{user.email}</p>
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "8px 14px", fontSize: 13, flexShrink: 0 }}
+                onClick={() => navigate("/profile/edit")}
+              >
+                Edit
+              </button>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <div style={{ width: "50%" }}>
+                <StatBox label="BMI" value={profile.bmi ?? "--"} unit="" accent="turmeric" />
+              </div>
+            </div>
+
+            <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 16 }}>
+              <button
+                onClick={() => setShowDetails((s) => !s)}
+                style={{ background: "none", border: "none", padding: 0, width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+              >
+                <h3>Details</h3>
+                <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{showDetails ? "Hide" : "Show"}</span>
+              </button>
+              {showDetails && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
+                  <DetailRow label="Primary goal" value={formatChoice(profile.primary_goal)} />
+                  <DetailRow label="Activity level" value={formatChoice(profile.activity_level)} />
+                  <DetailRow label="Height" value={profile.height_cm ? `${profile.height_cm} cm` : "--"} />
+                  <DetailRow label="Workout frequency" value={profile.workout_frequency ? `${profile.workout_frequency} / week` : "--"} />
+                  <DetailRow label="Workout location" value={formatChoice(profile.workout_location)} />
+                  {profile.medical_conditions && <DetailRow label="Medical conditions" value={profile.medical_conditions} />}
+                  {profile.food_allergies && <DetailRow label="Food allergies" value={profile.food_allergies} />}
+                </div>
+              )}
+            </div>
           </div>
-          <button
-            className="btn btn-secondary"
-            style={{ padding: "8px 14px", fontSize: 13, flexShrink: 0 }}
-            onClick={() => navigate("/profile/edit")}
-          >
-            Edit
-          </button>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <div style={{ width: "50%" }}>
-            <StatBox label="BMI" value={profile.bmi ?? "--"} unit="" accent="turmeric" />
-          </div>
+        <div className="profile-col-right">
+          <WeightProgress />
         </div>
-        </div>
-
-      <WeightProgress />
-
-      <div className="card">
-        <button
-          onClick={() => setShowDetails((s) => !s)}
-          style={{ background: "none", border: "none", padding: 0, width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-        >
-          <h3>Details</h3>
-          <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{showDetails ? "Hide" : "Show"}</span>
-        </button>
-        {showDetails && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
-            <DetailRow label="Primary goal" value={formatChoice(profile.primary_goal)} />
-            <DetailRow label="Activity level" value={formatChoice(profile.activity_level)} />
-            <DetailRow label="Height" value={profile.height_cm ? `${profile.height_cm} cm` : "--"} />
-            <DetailRow label="Workout frequency" value={profile.workout_frequency ? `${profile.workout_frequency} / week` : "--"} />
-            <DetailRow label="Workout location" value={formatChoice(profile.workout_location)} />
-            {profile.medical_conditions && <DetailRow label="Medical conditions" value={profile.medical_conditions} />}
-            {profile.food_allergies && <DetailRow label="Food allergies" value={profile.food_allergies} />}
-          </div>
-        )}
       </div>
 
       <button

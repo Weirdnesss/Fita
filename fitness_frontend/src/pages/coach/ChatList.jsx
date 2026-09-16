@@ -13,6 +13,7 @@ export default function ChatList() {
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null); // { id, title } | null
+  const recentChats = chats?.slice(0, 6);
 
   useEffect(() => {
     listChats().then(setChats).catch((err) => setError(extractErrorMessage(err)));
@@ -46,9 +47,18 @@ export default function ChatList() {
     <div className="page">
       <PageHeader title="Fitness Assistant" subtitle="Chat for explanations and recommendations" />
       <ErrorBanner message={error} />
-      <button className="btn btn-primary chat-new-button" onClick={handleNewChat} disabled={creating}>
-        {creating ? "Starting..." : "+ New Chat"}
-      </button>
+  
+      <div style={{ display: "flex", justifyContent: "right", marginTop: 8, gap: 8 }}>
+        <button className="btn btn-primary chat-new-button" onClick={handleNewChat} disabled={creating}>
+          {creating ? "Starting..." : "+ New Chat"}
+        </button>
+        <button
+          className="btn btn-secondary"
+          onClick={() => navigate("/coach/chats")}
+        >
+          Show All Chats
+        </button>
+      </div>
 
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
@@ -60,7 +70,7 @@ export default function ChatList() {
           <EmptyState title="No chats yet" eyebrow="Start a new chat to get personalized fitness recommendations." />
         )}
         <div className="chat-list-grid">
-        {chats?.map((c) => (
+        {recentChats?.map((c) => (
           <div key={c.id} className="card card-tab" style={{ marginBottom: 10, cursor: "pointer" }} onClick={() => navigate(`/coach/${c.id}`)}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <p style={{ fontWeight: 600 }}>{c.title}</p>
@@ -75,6 +85,16 @@ export default function ChatList() {
           </div>
         ))}
         </div>
+        {/* {chats && chats.length > 5 && (
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => navigate("/coach/chats")}
+            >
+              Show All Chats
+            </button>
+          </div>
+        )} */}
       </div>
 
       <ConfirmDialog

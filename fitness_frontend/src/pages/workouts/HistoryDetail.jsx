@@ -17,7 +17,7 @@ export default function HistoryDetail() {
 
   if (!history) {
     return (
-      <div className="page">
+      <div className="page history-detail">
         <PageHeader title="Loading" back backTo="/workouts" />
         <ErrorBanner message={error} />
         {!error && <Loading />}

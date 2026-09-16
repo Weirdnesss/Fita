@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { register, updateProfile, logWeight } from "../../api/accounts";
+import HeightField from "../../components/HeightField";
+import WeightField from "../../components/WeightField";
 import { ErrorBanner, extractErrorMessage } from "../../components/Status";
 
 const GENDERS = [
@@ -148,14 +150,15 @@ export default function Signup() {
   }
 
   return (
-    <div className="page" style={{ gap: 20 }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: "var(--chili)" }}>
-          FITNESS ASSISTANT
+    <div className="auth-page">
+      <div className="auth-card" style={{ gap: 20 }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: "var(--chili)" }}>
+            FITNESS ASSISTANT
+          </div>
+          <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 4 }}>Step {step} of 3</p>
         </div>
-        <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 4 }}>Step {step} of 3</p>
-      </div>
-      <StepDots step={step} />
+        <StepDots step={step} />
 
       {step === 1 && (
         <form onSubmit={handleStep1} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -217,24 +220,22 @@ export default function Signup() {
               </select>
             </div>
             <div>
-              <label>Current weight (kg)</label>
-              <input type="number" step="0.1" required value={form.currentWeightKg} onChange={set("currentWeightKg")} />
+              <WeightField
+                required
+                label="Current weight"
+                kg={form.currentWeightKg}
+                onChange={(v) => setForm((f) => ({ ...f, currentWeightKg: v }))}
+              />
             </div>
           </div>
           <div style={row2}>
             <div>
-              <label>Goal weight (kg)</label>
-              <input type="number" step="0.1" required value={form.goalWeightKg} onChange={set("goalWeightKg")} />
-            </div>
-            <div>
-              <label>Height (ft)</label>
-              <input type="number" required value={form.heightFt} onChange={set("heightFt")} />
-            </div>
-          </div>
-          <div style={row2}>
-            <div>
-              <label>Height (in)</label>
-              <input type="number" required value={form.heightIn} onChange={set("heightIn")} />
+              <WeightField
+                required
+                label="Goal weight"
+                kg={form.goalWeightKg}
+                onChange={(v) => setForm((f) => ({ ...f, goalWeightKg: v }))}
+              />
             </div>
             <div>
               <label>Primary goal</label>
@@ -244,6 +245,12 @@ export default function Signup() {
               </select>
             </div>
           </div>
+          <HeightField
+            required
+            ft={form.heightFt}
+            inch={form.heightIn}
+            onChange={({ ft, inch }) => setForm((f) => ({ ...f, heightFt: ft, heightIn: inch }))}
+          />
           <ErrorBanner message={error} />
           <div style={row2}>
             <button type="button" className="btn btn-secondary" onClick={() => setStep(1)}>Back</button>
@@ -284,6 +291,7 @@ export default function Signup() {
           </div>
         </form>
       )}
+      </div>
     </div>
   );
 }

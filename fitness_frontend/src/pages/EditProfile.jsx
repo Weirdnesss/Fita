@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { updateProfile } from "../api/accounts";
 import PageHeader from "../components/PageHeader";
+import HeightField from "../components/HeightField";
 import { ErrorBanner, extractErrorMessage } from "../components/Status";
 import { useToast } from "../context/ToastContext";
 
@@ -99,73 +100,74 @@ export default function EditProfile() {
     <div className="page">
       <PageHeader title="Edit Profile" back backTo="/profile" />
 
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={row2}>
-          <div>
-            <label>Gender</label>
-            <select value={form.gender} onChange={set("gender")}>
-              <option value="">Select</option>
-              {GENDERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-          <div>
-            <label>Date of birth</label>
-            <input type="date" max={new Date().toISOString().split("T")[0]} value={form.dateOfBirth} onChange={set("dateOfBirth")} />
-          </div>
-        </div>
+      <form onSubmit={handleSubmit} className="form-narrow" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="form-grid">
+          <div className="form-col">
+            <div style={row2}>
+              <div>
+                <label>Gender</label>
+                <select value={form.gender} onChange={set("gender")}>
+                  <option value="">Select</option>
+                  {GENDERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div>
+                <label>Date of birth</label>
+                <input type="date" max={new Date().toISOString().split("T")[0]} value={form.dateOfBirth} onChange={set("dateOfBirth")} />
+              </div>
+            </div>
 
-        <div style={row2}>
-          <div>
-            <label>Activity level</label>
-            <select value={form.activityLevel} onChange={set("activityLevel")}>
-              <option value="">Select</option>
-              {ACTIVITY_LEVELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-          <div>
-            <label>Primary goal</label>
-            <select value={form.primaryGoal} onChange={set("primaryGoal")}>
-              <option value="">Select</option>
-              {GOALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-        </div>
+            <HeightField
+              ft={form.heightFt}
+              inch={form.heightIn}
+              onChange={({ ft, inch }) => setForm((f) => ({ ...f, heightFt: ft, heightIn: inch }))}
+            />
 
-        <div style={row2}>
-          <div>
-            <label>Height (ft)</label>
-            <input type="number" value={form.heightFt} onChange={set("heightFt")} />
+            <div style={row2}>
+              <div>
+                <label>Activity level</label>
+                <select value={form.activityLevel} onChange={set("activityLevel")}>
+                  <option value="">Select</option>
+                  {ACTIVITY_LEVELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div>
+                <label>Primary goal</label>
+                <select value={form.primaryGoal} onChange={set("primaryGoal")}>
+                  <option value="">Select</option>
+                  {GOALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+            </div>
           </div>
-          <div>
-            <label>Height (in)</label>
-            <input type="number" value={form.heightIn} onChange={set("heightIn")} />
-          </div>
-        </div>
 
-        <div style={row2}>
-          <div>
-            <label>Workout frequency</label>
-            <select value={form.workoutFrequency} onChange={set("workoutFrequency")}>
-              <option value="">Select</option>
-              {FREQUENCIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-          <div>
-            <label>Workout location</label>
-            <select value={form.workoutLocation} onChange={set("workoutLocation")}>
-              <option value="">Select</option>
-              {LOCATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-        </div>
+          <div className="form-col">
+            <div style={row2}>
+              <div>
+                <label>Workout frequency</label>
+                <select value={form.workoutFrequency} onChange={set("workoutFrequency")}>
+                  <option value="">Select</option>
+                  {FREQUENCIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div>
+                <label>Workout location</label>
+                <select value={form.workoutLocation} onChange={set("workoutLocation")}>
+                  <option value="">Select</option>
+                  {LOCATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+            </div>
 
-        <div>
-          <label>Medical conditions, injuries, or limitations (optional)</label>
-          <textarea rows={2} value={form.medicalConditions} onChange={set("medicalConditions")} placeholder="Leave blank if none" />
-        </div>
-        <div>
-          <label>Food allergies / dietary restrictions (optional)</label>
-          <textarea rows={2} value={form.foodAllergies} onChange={set("foodAllergies")} placeholder="Leave blank if none" />
+            <div>
+              <label>Medical conditions, injuries, or limitations (optional)</label>
+              <textarea rows={2} value={form.medicalConditions} onChange={set("medicalConditions")} placeholder="Leave blank if none" />
+            </div>
+            <div>
+              <label>Food allergies / dietary restrictions (optional)</label>
+              <textarea rows={2} value={form.foodAllergies} onChange={set("foodAllergies")} placeholder="Leave blank if none" />
+            </div>
+          </div>
         </div>
 
         <ErrorBanner message={error} />

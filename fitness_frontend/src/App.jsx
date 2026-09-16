@@ -23,6 +23,7 @@ import NutritionTrends from "./pages/nutrition/NutritionTrends";
 
 import ChatList from "./pages/coach/ChatList";
 import ChatDetail from "./pages/coach/ChatDetail";
+import ChatHistory from "./pages/coach/ChatHistory";
 
 import ReportsList from "./pages/progress/ReportsList";
 import ReportDetail from "./pages/progress/ReportDetail";
@@ -63,6 +64,7 @@ export default function App() {
               <Route path="/nutrition/trends" element={<NutritionTrends />} />
 
               <Route path="/coach" element={<ChatList />} />
+              <Route path="/coach/chats" element={<ChatHistory />} />
               <Route path="/coach/:id" element={<ChatDetail />} />
 
               <Route path="/progress" element={<ReportsList />} />

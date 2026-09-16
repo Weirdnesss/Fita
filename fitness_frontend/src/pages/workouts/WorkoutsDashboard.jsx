@@ -14,6 +14,7 @@ export default function WorkoutsDashboard() {
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null); // { id, title } | null
+  const [filter, setFilter] = useState("all"); // "all" | "own" | "generated"
 
   useEffect(() => {
     load();
@@ -63,36 +64,58 @@ export default function WorkoutsDashboard() {
     }
   }
 
+  const ownCount = templates?.filter((r) => !r.is_generated).length ?? 0;
+  const generatedCount = templates?.filter((r) => r.is_generated).length ?? 0;
+  const visibleTemplates = templates?.filter((r) => {
+    if (filter === "own") return !r.is_generated;
+    if (filter === "generated") return r.is_generated;
+    return true;
+  });
+
   return (
     <div className="page">
       <PageHeader title="Workouts" subtitle="Organize your routines" />
       <ErrorBanner message={error} />
 
-      <div className="card" style={{ marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="card workout-actions-row" style={{ marginBottom: 20 }}>
         <div>
           <p style={{ fontWeight: 600 }}>Generate a workout</p>
           <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
             Built from your goal, frequency, and location · once a week
           </p>
         </div>
-        <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleGenerate} disabled={generating}>
-          {generating ? "Generating..." : "Generate"}
-        </button>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => navigate("/workouts/new")}>
+            + Create
+          </button>
+          <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleGenerate} disabled={generating}>
+            {generating ? "Generating..." : "Generate"}
+          </button>
+        </div>
       </div>
 
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <h3>My Routines</h3>
-          <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => navigate("/workouts/new")}>
-            + Create
-          </button>
         </div>
+
+        {templates?.length > 0 && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            <FilterChip active={filter === "all"} label={`All (${templates.length})`} onClick={() => setFilter("all")} />
+            <FilterChip active={filter === "own"} label={`Own (${ownCount})`} onClick={() => setFilter("own")} />
+            <FilterChip active={filter === "generated"} label={`Generated (${generatedCount})`} onClick={() => setFilter("generated")} />
+          </div>
+        )}
+
         {templates === null && <Loading />}
       {templates?.length === 0 && <EmptyState title="No templates added yet" />}
+      {templates?.length > 0 && visibleTemplates.length === 0 && (
+        <EmptyState title={filter === "own" ? "No routines you've created yet" : "No generated routines yet"} />
+      )}
 
-      {templates?.length > 0 && (
+      {visibleTemplates?.length > 0 && (
         <div className="workout-template-grid">
-          {templates.map((r) => (
+          {visibleTemplates.map((r) => (
             <div key={r.id} className="card" style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
@@ -201,5 +224,17 @@ function MiniStat({ label, value }) {
       <div className="stat" style={{ fontSize: 15 }}>{value}</div>
       <div className="eyebrow">{label}</div>
     </div>
+  );
+}
+
+function FilterChip({ active, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={active ? "btn btn-primary" : "btn btn-secondary"}
+      style={{ padding: "6px 12px", fontSize: 12, whiteSpace: "nowrap", flexShrink: 0, height: "auto" }}
+    >
+      {label}
+    </button>
   );
 }

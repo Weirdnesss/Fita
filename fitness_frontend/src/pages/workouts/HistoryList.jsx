@@ -18,7 +18,7 @@ export default function HistoryList() {
     const [error, setError] = useState("");
     const [page, setPage] = useState(1);
 
-    const ITEMS_PER_PAGE = 10;
+    const ITEMS_PER_PAGE = 3;
 
   useEffect(() => {
     load();
@@ -63,6 +63,7 @@ export default function HistoryList() {
 
       {history?.length > 0 && (
         <div>
+          <div className="workout-history-grid">
           {visibleHistory.map((h) => (
             <div
               key={h.id}
@@ -132,6 +133,7 @@ export default function HistoryList() {
               </div>
             </div>
           ))}
+          </div>
           {totalPages > 1 && (
             <div className="pagination">
                 <button
@@ -172,4 +174,3 @@ function MiniStat({ label, value }) {
     </div>
   );
 }
-

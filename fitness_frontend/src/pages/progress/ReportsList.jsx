@@ -17,6 +17,8 @@ export default function ReportsList() {
   const [cooldown, setCooldown] = useState(0); // seconds remaining before another generate is allowed
   const [pendingDelete, setPendingDelete] = useState(null); // report id | null
   const autoTriedRef = useRef(false); // guard against double-firing (e.g. React StrictMode)
+  const [currentPage, setCurrentPage] = useState(1);
+  const reportsPerPage = 10;
 
   useEffect(() => {
     load();
@@ -53,6 +55,16 @@ export default function ReportsList() {
     runIntervalGeneration();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
+
+  useEffect(() => {
+    if (reports && reports.length > 0) {
+      const totalPages = Math.ceil(reports.length / reportsPerPage);
+
+      if (currentPage > totalPages) {
+        setCurrentPage(totalPages);
+      }
+    }
+  }, [reports, currentPage]);
 
   function load() {
     listReports().then(setReports).catch((err) => setError(extractErrorMessage(err)));
@@ -118,6 +130,13 @@ export default function ReportsList() {
     }
   }
 
+  const totalPages = reports ? Math.ceil(reports.length / reportsPerPage) : 0;
+
+  const startIndex = (currentPage - 1) * reportsPerPage;
+  const paginatedReports = reports
+    ? reports.slice(startIndex, startIndex + reportsPerPage)
+    : [];
+
   return (
     <div className="page">
       <PageHeader title="Progress Reports" subtitle="Generated Reports" />
@@ -156,10 +175,42 @@ export default function ReportsList() {
         </button>
       </div>
 
+            {reports && reports.length > reportsPerPage && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 12,
+            marginTop: 16,
+          }}
+        >
+          <button
+            className="btn btn-secondary"
+            onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+            disabled={currentPage === 1}
+          >
+            Previous
+          </button>
+
+          <span style={{ fontSize: 13, color: "var(--text-faint)" }}>
+            Page {currentPage} of {totalPages}
+          </span>
+
+          <button
+            className="btn btn-secondary"
+            onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+            disabled={currentPage === totalPages}
+          >
+            Next
+          </button>
+        </div>
+      )}
+
       {reports === null && <Loading />}
       {reports?.length === 0 && <EmptyState title="No reports yet" eyebrow="Generate your first one above" />}
         <div className="report-list-grid">
-          {reports?.map((r) => (
+          {paginatedReports.map((r) => (
             <div
               key={r.id}
               className="card card-tab"
@@ -206,6 +257,8 @@ export default function ReportsList() {
     </div>
   );
 }
+
+
 
 function StatusPill({ status }) {
   const map = {

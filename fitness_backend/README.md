@@ -145,3 +145,32 @@ or even a simple management command + cron) later.
 Uses the same GROQ_API_KEY as the coach app. If it's missing, /generate/
 returns 502 immediately (before touching the database) rather than
 silently failing partway through.
+
+## Resources module (/resources/)
+A curated, admin-managed catalog of workout/nutrition articles -- global
+and read-only from the API (not scoped per-user, everyone sees the same
+list). Populate entries via /admin/.
+
+- GET /resources/?category=workout&q=beginner   -- list, with optional
+  category ("workout"|"nutrition"|"general") and title-search filters
+
+## Testing
+Each app has a `tests.py` covering auth requirements, cross-user data
+isolation (the property that matters most -- every queryset is scoped to
+`request.user`), core CRUD flows, and the missing-GROQ_API_KEY error path
+for the two LLM-backed modules (coach, progress).
+
+Run the full suite:
+```
+python manage.py test
+```
+
+Run a single app or test:
+```
+python manage.py test accounts
+python manage.py test accounts.tests.WeightLogTests.test_rejects_implausible_weight
+```
+
+No GROQ_API_KEY or internet access is needed to run the tests -- the LLM
+integration paths are tested via their config-error behavior (missing key
+-> clean 502), not by making real API calls.

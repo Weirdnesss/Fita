@@ -91,6 +91,8 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://10.162.222.183:5173",
+    "http://192.168.1.102:5173",
 ]
 
 ROOT_URLCONF = 'backend.urls'

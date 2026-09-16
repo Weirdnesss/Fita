@@ -231,7 +231,7 @@ export default function ActiveWorkout() {
   }
 
   return (
-    <div className="page">
+    <div className="page active-workout">
       <PageHeader
         title={template.title}
         back
