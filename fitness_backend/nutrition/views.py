@@ -23,6 +23,37 @@ from .services.goal_calculator import REQUIRED_FIELDS, calculate_goals, missing_
 # to pad historical totals, neither of which should be encouraged.
 MAX_BACKDATE_DAYS = 7
 
+
+def get_or_create_nutrition_profile(user):
+    """
+    Like NutritionProfile.objects.get_or_create(user=user), except on first
+    creation it tries to seed personalized goals (Mifflin-St Jeor, via the
+    same calculate_goals() used by the manual "Calculate" button) from the
+    user's accounts.Profile instead of leaving the hardcoded generic
+    defaults (2000 kcal / 100p / 250c / 65f) in place.
+
+    Falls back to those defaults if the accounts.Profile is missing or
+    incomplete (e.g. this is ever called for a user who skipped/exited the
+    signup wizard partway through) -- this should never raise on account of
+    incomplete profile data.
+    """
+    nutrition_profile, created = NutritionProfile.objects.get_or_create(user=user)
+    if created:
+        try:
+            accounts_profile = user.profile
+        except Profile.DoesNotExist:
+            accounts_profile = None
+
+        if accounts_profile and not missing_profile_fields(accounts_profile):
+            result = calculate_goals(accounts_profile)
+            nutrition_profile.daily_calories_goal = result.calories
+            nutrition_profile.daily_protein_goal = result.protein_g
+            nutrition_profile.daily_carbs_goal = result.carbs_g
+            nutrition_profile.daily_fat_goal = result.fat_g
+            nutrition_profile.save()
+
+    return nutrition_profile, created
+
 # Sanity ceiling on servings -- catches fat-fingered input (e.g. an extra
 # zero) rather than any real intended amount. 50 servings of a 100g
 # PhilFCT item is already 5kg of food in one entry, well past anything
@@ -112,7 +143,7 @@ class NutritionProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = NutritionProfileSerializer
 
     def get_object(self):
-        profile, _ = NutritionProfile.objects.get_or_create(user=self.request.user)
+        profile, _ = get_or_create_nutrition_profile(self.request.user)
         return profile
 
 
@@ -168,7 +199,7 @@ class DailyEntryView(APIView):
         date_str = request.query_params.get("date")
         date = timezone.datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else timezone.localdate()
 
-        nutrition_profile, _ = NutritionProfile.objects.get_or_create(user=request.user)
+        nutrition_profile, _ = get_or_create_nutrition_profile(request.user)
         daily_entry = DailyEntry.objects.filter(
             nutrition_profile=nutrition_profile, date=date
         ).first()
@@ -217,7 +248,7 @@ class NutritionTrendsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        nutrition_profile, _ = NutritionProfile.objects.get_or_create(user=request.user)
+        nutrition_profile, _ = get_or_create_nutrition_profile(request.user)
         today = timezone.localdate()
         start_date = today - timezone.timedelta(days=num_days - 1)
 
@@ -342,7 +373,7 @@ class FoodEntryCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        nutrition_profile, _ = NutritionProfile.objects.get_or_create(user=request.user)
+        nutrition_profile, _ = get_or_create_nutrition_profile(request.user)
         daily_entry, _ = DailyEntry.objects.get_or_create(
             nutrition_profile=nutrition_profile, date=date
         )

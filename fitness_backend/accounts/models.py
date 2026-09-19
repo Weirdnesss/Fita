@@ -80,6 +80,11 @@ class Gender(models.TextChoices):
     PREFER_NOT_TO_SAY = "prefer_not_to_say", "Prefer not to say"
 
 
+class UnitSystem(models.TextChoices):
+    METRIC = "metric", "Metric (kg, cm)"
+    IMPERIAL = "imperial", "Imperial (lbs, ft/in)"
+
+
 class Profile(models.Model):
     """
     Steps 2 & 3 of signup. One-to-one with Account so the account
@@ -127,6 +132,14 @@ class Profile(models.Model):
     )
     workout_location = models.CharField(
         max_length=10, choices=WorkoutLocation.choices, blank=True
+    )
+
+    # Display-only preference: which unit each height/weight field is
+    # entered/shown in. Storage stays kg/ft/in either way (see height_cm
+    # property and current_weight_kg/goal_weight_kg above) -- this never
+    # changes what's persisted, only how the frontend presents it.
+    unit_system = models.CharField(
+        max_length=10, choices=UnitSystem.choices, default=UnitSystem.METRIC
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

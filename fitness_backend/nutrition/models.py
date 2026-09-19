@@ -84,6 +84,18 @@ class NutritionProfile(models.Model):
     daily_protein_goal = models.FloatField(default=100)
     daily_carbs_goal = models.FloatField(default=250)
     daily_fat_goal = models.FloatField(default=65)
+
+    # User-controlled setting, not an inferred state: while True,
+    # sync_calculated_goals() (services/goal_calculator.py) keeps these
+    # goals freshly recalculated every time weight is logged or
+    # accounts.Profile changes -- even overwriting a value the user typed
+    # in by hand, since that's what the setting means. Flip to False (in
+    # Nutrition Goals) to stop all automatic recalculation entirely and
+    # manage goals by hand from then on. Defaults True so a new signup's
+    # goals stay accurate without the user having to know this setting
+    # exists.
+    auto_recalculate_goals = models.BooleanField(default=True)
+
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 
 from .models import Profile, WeightLog
 
@@ -11,6 +12,12 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True, min_length=8)
+    email = serializers.EmailField(
+        validators=[UniqueValidator(
+            queryset=Account.objects.all(),
+            message="An account with this email already exists.",
+        )]
+    )
 
     class Meta:
         model = Account
@@ -74,6 +81,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "food_allergies",
             "workout_frequency",
             "workout_location",
+            "unit_system",
             "bmi",
             "height_cm",
         ]
@@ -81,12 +89,19 @@ class ProfileSerializer(serializers.ModelSerializer):
 
 class AccountSerializer(serializers.ModelSerializer):
     """Full profile view: combines Account + nested Profile."""
-
     profile = ProfileSerializer(read_only=True)
 
     class Meta:
         model = Account
-        fields = ["id", "email", "first_name", "last_name", "profile"]
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "date_joined",
+            "profile",
+        ]
+        read_only_fields = ["date_joined"]
 
 
 class WeightLogSerializer(serializers.ModelSerializer):

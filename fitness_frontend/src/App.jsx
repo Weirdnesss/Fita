@@ -6,6 +6,7 @@ import AppLayout from "./components/AppLayout";
 
 import Login from "./pages/auth/Login";
 import Signup from "./pages/auth/Signup";
+import Onboarding from "./pages/auth/Onboarding";
 import ProfilePage from "./pages/ProfilePage";
 import EditProfile from "./pages/EditProfile";
 import WeightLog from "./pages/WeightLog";
@@ -39,7 +40,14 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
-
+            <Route
+              path="/onboarding"
+              element={
+                <RequireAuth>
+                  <Onboarding />
+                </RequireAuth>
+              }
+            />
             <Route
               element={
                 <RequireAuth>

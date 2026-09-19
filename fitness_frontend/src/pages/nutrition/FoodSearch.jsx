@@ -101,7 +101,7 @@ export default function FoodSearch() {
         editingEntryId={editingEntryId}
         editingMealType={editingMealType}
         onBack={() => setSelected(null)}
-        onLogged={() => navigate("/nutrition")}
+        onLogged={() => navigate("/nutrition", { state: { date: logDate } })}
       />
     );
   }
@@ -131,6 +131,7 @@ export default function FoodSearch() {
           Showing {results.length} of {count}
         </p>
       )}
+      <div className="food-search-results-grid">
       {results.map((food) => (
         <div key={food.id} className="card" style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => setSelected(food)}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -148,6 +149,7 @@ export default function FoodSearch() {
           </div>
         </div>
       ))}
+      </div>
         {!loading && nextOffset !== null && (
           <button
             className="btn btn-secondary btn-block"
@@ -224,7 +226,7 @@ function FoodDetail({ food, logDate, editingEntryId, editingMealType, onBack, on
   }
 
   return (
-    <div className="page">
+    <div className="page food-detail">
       <PageHeader
         title={food.name}
         subtitle={food.local_name || undefined}
@@ -232,9 +234,13 @@ function FoodDetail({ food, logDate, editingEntryId, editingMealType, onBack, on
         action={<button className="btn-ghost" style={{ background: "none", border: "none" }} onClick={onBack}>Back to Search</button>}
       />
 
-      {logDate && (
+      {logDate && logDate !== new Date().toISOString().slice(0, 10) && (
         <p style={{ fontSize: 12, color: "var(--turmeric)" }}>
-          Logging to {new Date(logDate + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}, not today.
+          Logging to {new Date(logDate + "T00:00:00").toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric"
+          })}, not today.
         </p>
       )}
 

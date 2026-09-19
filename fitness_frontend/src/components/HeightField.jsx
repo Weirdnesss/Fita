@@ -6,8 +6,8 @@ import UnitToggle from "./UnitToggle";
 // height_cm is a derived read-only property). This component is a
 // frontend-only convenience: cm mode is just a different way to edit
 // the same ft/in values, converted on every keystroke.
-export default function HeightField({ ft, inch, onChange, required = false }) {
-  const [unit, setUnit] = useState("ftin"); // "ftin" | "cm"
+export default function HeightField({ ft, inch, onChange, required = false, defaultUnit = "ftin", allowToggle = true }) {
+  const [unit, setUnit] = useState(defaultUnit);
   const [cmDraft, setCmDraft] = useState(() => (ft ? String(ftInToCm(ft, inch)) : ""));
 
   function switchUnit(next) {
@@ -34,11 +34,15 @@ export default function HeightField({ ft, inch, onChange, required = false }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
         <label style={{ marginBottom: 0 }}>Height</label>
-        <UnitToggle
-          options={[{ value: "ftin", label: "ft / in" }, { value: "cm", label: "cm" }]}
-          value={unit}
-          onChange={switchUnit}
-        />
+        {allowToggle ? (
+          <UnitToggle
+            options={[{ value: "ftin", label: "ft / in" }, { value: "cm", label: "cm" }]}
+            value={unit}
+            onChange={switchUnit}
+          />
+        ) : (
+          <span style={{ fontSize: 11, color: "var(--text-faint)" }}>{unit === "ftin" ? "ft / in" : "cm"}</span>
+        )}
       </div>
 
       {unit === "ftin" ? (

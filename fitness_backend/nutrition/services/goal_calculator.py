@@ -179,3 +179,45 @@ def calculate_goals(profile) -> GoalCalculationResult:
         calorie_floor_applied=calorie_floor_applied,
         assumptions=assumptions,
     )
+
+def sync_calculated_goals(user):
+    """
+    Called whenever something that feeds this calculation changes for a
+    user who already has a NutritionProfile -- a new weight log, or an
+    accounts.Profile edit (height/age/gender/activity level/primary goal).
+
+    Recalculates and overwrites the user's goals, but only while
+    auto_recalculate_goals is True -- that's a plain user-controlled
+    setting (Nutrition Goals screen), not an inferred state, so this
+    intentionally overwrites even a goal the user typed in by hand: that's
+    what leaving the setting on means. Turning it off stops this function
+    from touching goals at all, until the user turns it back on.
+
+    A no-op (not an error) if there's no NutritionProfile yet -- it'll be
+    seeded correctly on first touch via get_or_create_nutrition_profile --
+    or if accounts.Profile is missing/incomplete.
+    """
+    from ..models import NutritionProfile  # local import: avoids a module-load cycle with models.py
+
+    try:
+        nutrition_profile = NutritionProfile.objects.get(user=user)
+    except NutritionProfile.DoesNotExist:
+        return
+
+    if not nutrition_profile.auto_recalculate_goals:
+        return
+
+    try:
+        accounts_profile = user.profile
+    except Exception:
+        return
+
+    if missing_profile_fields(accounts_profile):
+        return
+
+    result = calculate_goals(accounts_profile)
+    nutrition_profile.daily_calories_goal = result.calories
+    nutrition_profile.daily_protein_goal = result.protein_g
+    nutrition_profile.daily_carbs_goal = result.carbs_g
+    nutrition_profile.daily_fat_goal = result.fat_g
+    nutrition_profile.save()

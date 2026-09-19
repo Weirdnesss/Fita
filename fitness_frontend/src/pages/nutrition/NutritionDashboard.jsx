@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 import { getDailyEntry, getNutritionProfile, deleteFoodEntry, updateFoodEntry } from "../../api/nutrition";
+import { getMe } from "../../api/accounts";
 
 
 const MEALS = [
@@ -24,14 +25,26 @@ const MAX_SERVINGS = 50;
 
 export default function NutritionDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const showToast = useToast();
   const [daily, setDaily] = useState(null);
   const [goals, setGoals] = useState(null);
+  const [account, setAccount] = useState(null);
   const [error, setError] = useState("");
-  const [selectedDate, setSelectedDate] = useState(() => toDateStr(new Date()));
+  const [selectedDate, setSelectedDate] = useState(
+    () => location.state?.date || toDateStr(new Date())
+  );
 
   const isToday = selectedDate === toDateStr(new Date());
   const isWithinLogWindow = daysAgo(selectedDate) <= MAX_BACKDATE_DAYS;
+
+  const accountStartDate = account?.date_joined
+    ? toDateStr(new Date(account.date_joined))
+    : null;
+
+  const isOldestDate = accountStartDate
+    ? selectedDate <= accountStartDate
+    : false;
 
   useEffect(() => {
     load(selectedDate);
@@ -39,9 +52,15 @@ export default function NutritionDashboard() {
 
   async function load(date) {
     try {
-      const [d, g] = await Promise.all([getDailyEntry(date), getNutritionProfile()]);
+      const [d, g, a] = await Promise.all([
+        getDailyEntry(date),
+        getNutritionProfile(),
+        getMe(),
+      ]);
+
       setDaily(d);
       setGoals(g);
+      setAccount(a);
     } catch (err) {
       setError(extractErrorMessage(err));
     }
@@ -115,7 +134,7 @@ export default function NutritionDashboard() {
     }
   }
 
-  if (!daily || !goals) {
+  if (!daily || !goals || !account) {
     return (
       <div className="page">
         <PageHeader title="Nutrition" subtitle="Log and track your macros" />
@@ -141,14 +160,54 @@ export default function NutritionDashboard() {
       <PageHeader title="Nutrition" subtitle="Log and track your macros" />
       <ErrorBanner message={error} />
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <button onClick={() => shiftDay(-1)} className="btn-ghost" style={{ background: "none", border: "none", fontSize: 18, padding: "4px 10px" }}>
+      <div className="nutrition-content">
+      <div className="nutrition-date-nav" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <button
+          onClick={() => shiftDay(-1)}
+          disabled={isOldestDate}
+          className="btn-ghost"
+          style={{
+            background: "none",
+            border: "none",
+            fontSize: 18,
+            padding: "4px 10px",
+            opacity: isOldestDate ? 0.3 : 1,
+          }}
+        >
           ‹
         </button>
         <div style={{ textAlign: "center" }}>
-          <p style={{ fontWeight: 600, fontSize: 14 }}>{formatDayLabel(selectedDate)}</p>
+          <input
+            type="date"
+            value={selectedDate}
+            min={accountStartDate}
+            max={toDateStr(new Date())}
+            onChange={(e) => {
+              if (e.target.value) {
+                setSelectedDate(e.target.value);
+              }
+            }}
+            style={{
+              fontWeight: 600,
+              fontSize: 14,
+              border: "none",
+              background: "transparent",
+              color: "inherit",
+              textAlign: "center",
+              cursor: "pointer",
+            }}
+          />
+
           {!isToday && (
-            <button onClick={() => setSelectedDate(toDateStr(new Date()))} style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 11 }}>
+            <button
+              onClick={() => setSelectedDate(toDateStr(new Date()))}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--chili)",
+                fontSize: 11,
+              }}
+            >
               Back to Today
             </button>
           )}
@@ -180,7 +239,7 @@ export default function NutritionDashboard() {
       </div>
 
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 ,marginTop: 8}}>
           <h3>Food Entries</h3>
           <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{formatDayLabel(selectedDate)}</span>
         </div>
@@ -190,7 +249,7 @@ export default function NutritionDashboard() {
             Trends
           </button>
           {isWithinLogWindow ? (
-            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate("/nutrition/search", { state: { date: selectedDate } })}>
+            <button className="btn btn-primary" style={{ flex: 1}} onClick={() => navigate("/nutrition/search", { state: { date: selectedDate } })}>
               Add Food
             </button>
           ) : (
@@ -291,6 +350,7 @@ export default function NutritionDashboard() {
           
         ))}
         </div>
+      </div>
       </div>
 
       <ConfirmDialog

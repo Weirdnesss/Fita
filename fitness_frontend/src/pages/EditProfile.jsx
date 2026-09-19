@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { updateProfile } from "../api/accounts";
 import PageHeader from "../components/PageHeader";
 import HeightField from "../components/HeightField";
+import UnitToggle from "../components/UnitToggle";
 import { ErrorBanner, extractErrorMessage } from "../components/Status";
 import { useToast } from "../context/ToastContext";
 
@@ -54,6 +55,7 @@ function initialFormFrom(profile) {
     foodAllergies: profile.food_allergies || "",
     workoutFrequency: profile.workout_frequency || "",
     workoutLocation: profile.workout_location || "",
+    unitSystem: profile.unit_system || "metric",
   };
 }
 
@@ -83,6 +85,7 @@ export default function EditProfile() {
         food_allergies: form.foodAllergies,
         workout_frequency: form.workoutFrequency,
         workout_location: form.workoutLocation,
+        unit_system: form.unitSystem,
       });
       // So /profile shows the new values immediately instead of the
       // stale copy AuthContext loaded at login/last refresh.
@@ -101,6 +104,18 @@ export default function EditProfile() {
       <PageHeader title="Edit Profile" back backTo="/profile" />
 
       <form onSubmit={handleSubmit} className="form-narrow" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h3 style={{ marginBottom: 2 }}>Units</h3>
+            <p style={{ fontSize: 12, color: "var(--text-faint)" }}>Applies to weight and height everywhere in the app.</p>
+          </div>
+          <UnitToggle
+            options={[{ value: "metric", label: "Metric" }, { value: "imperial", label: "Imperial" }]}
+            value={form.unitSystem}
+            onChange={(v) => setForm((f) => ({ ...f, unitSystem: v }))}
+          />
+        </div>
+
         <div className="form-grid">
           <div className="form-col">
             <div style={row2}>
@@ -118,6 +133,9 @@ export default function EditProfile() {
             </div>
 
             <HeightField
+              key={form.unitSystem}
+              defaultUnit={form.unitSystem === "imperial" ? "ftin" : "cm"}
+              allowToggle={false}
               ft={form.heightFt}
               inch={form.heightIn}
               onChange={({ ft, inch }) => setForm((f) => ({ ...f, heightFt: ft, heightIn: inch }))}

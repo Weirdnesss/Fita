@@ -26,7 +26,7 @@ export default function NutritionTrends() {
   }, [period]);
 
   return (
-    <div className="page">
+    <div className="page nutrition-trends">
       <PageHeader title="Trends" subtitle="Your logging patterns over time" back />
       <ErrorBanner message={error} />
 

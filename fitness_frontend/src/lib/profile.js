@@ -55,3 +55,31 @@ export function kgToLbs(kg) {
 export function lbsToKg(lbs) {
   return Math.round(lbs * KG_PER_LB * 10) / 10;
 }
+
+// Read-only display formatting, driven by profile.unit_system (see
+// accounts/models.py UnitSystem -- "metric" or "imperial"). Storage is
+// unaffected either way; this only decides how a stored kg/ft/in value
+// is *shown*. Defaults to metric so callers that don't have a logged-in
+// profile yet (or an older profile predating this field) still get a
+// sensible fallback.
+export function formatWeight(kg, unitSystem = "metric") {
+  if (kg === null || kg === undefined || kg === "") return null;
+  if (unitSystem === "imperial") return `${Math.round(kgToLbs(Number(kg)))} lbs`;
+  return `${Number(kg)} kg`;
+}
+
+export function formatHeight(ft, inch, unitSystem = "metric") {
+  if (ft === null || ft === undefined || ft === "") return null;
+  if (unitSystem === "imperial") return `${ft}' ${inch || 0}"`;
+  return `${ftInToCm(ft, inch)} cm`;
+}
+
+// For a +/- change value (e.g. weight trend delta) rather than an
+// absolute reading -- kept separate from formatWeight so callers don't
+// have to strip/re-add the sign themselves.
+export function formatWeightDelta(kgChange, unitSystem = "metric") {
+  if (unitSystem === "imperial") {
+    return { value: Math.round(kgToLbs(kgChange)), unit: "lbs" };
+  }
+  return { value: Math.round(kgChange * 10) / 10, unit: "kg" };
+}

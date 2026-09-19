@@ -104,6 +104,17 @@ export default function NutritionSettings() {
     setGoals((g) => ({ ...g, [field]: value }));
   }
 
+  async function handleToggleAutoRecalculate() {
+    const next = !goals.auto_recalculate_goals;
+    try {
+      const updated = await updateNutritionProfile({ auto_recalculate_goals: next });
+      setGoals(updated);
+      showToast(next ? "Goals will update automatically as your stats change" : "Automatic updates turned off", "success");
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    }
+  }
+
   async function handleSave() {
     if (goalsInvalid) return;
     setSaving(true);
@@ -144,7 +155,7 @@ export default function NutritionSettings() {
   });
 
   return (
-    <div className="page">
+    <div className="page nutrition-settings">
       <PageHeader title="Nutrition Goals" subtitle="Your daily targets, used on the Nutrition dashboard" back />
 
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -157,6 +168,24 @@ export default function NutritionSettings() {
           </div>
           <button className="btn btn-secondary" onClick={handleAutoCalculate} disabled={calculating}>
             {calculating ? "..." : "Calculate"}
+          </button>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+          <div>
+            <p style={{ fontWeight: 600, fontSize: 13 }}>Keep goals updated automatically</p>
+            <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+              {goals.auto_recalculate_goals
+                ? "On -- your goals recalculate whenever your weight or profile changes, even overwriting a number you've set here."
+                : "Off -- goals only change when you edit them yourself."}
+            </p>
+          </div>
+          <button
+            className={goals.auto_recalculate_goals ? "btn btn-primary" : "btn btn-secondary"}
+            style={{ padding: "8px 14px", fontSize: 13, flexShrink: 0 }}
+            onClick={handleToggleAutoRecalculate}
+          >
+            {goals.auto_recalculate_goals ? "On" : "Off"}
           </button>
         </div>
 

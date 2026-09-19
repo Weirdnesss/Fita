@@ -3,7 +3,10 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from accounts.models import Profile
 from .models import DailyEntry, FoodEntry, FoodItem, NutritionProfile
+
+import datetime
 
 Account = get_user_model()
 
@@ -55,6 +58,125 @@ class DailyEntryTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["total_calories"], 0)
         self.assertFalse(DailyEntry.objects.exists())
+
+
+class NutritionProfileAutoCalculationTests(APITestCase):
+    """
+    NutritionProfile is lazily created on first touch (not at registration
+    itself). This checks that first touch seeds personalized goals from
+    accounts.Profile when enough signup data is present, and only falls
+    back to the generic hardcoded defaults when it isn't.
+    """
+
+    def setUp(self):
+        self.user = Account.objects.create_user(email="a@test.com", password="pass12345")
+        self.client.force_authenticate(user=self.user)
+
+    def test_complete_profile_seeds_calculated_goals_not_generic_defaults(self):
+        Profile.objects.create(
+            user=self.user,
+            gender="male",
+            date_of_birth=datetime.date(1998, 1, 1),
+            activity_level="moderately_active",
+            current_weight_kg=75,
+            height_ft=5,
+            height_in=10,
+        )
+        response = self.client.get("/nutrition/daily/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        nutrition_profile = NutritionProfile.objects.get(user=self.user)
+        # Wouldn't hold exactly by coincidence for this weight/height/age/gender/activity combo.
+        self.assertNotEqual(nutrition_profile.daily_calories_goal, 2000)
+        self.assertNotEqual(nutrition_profile.daily_protein_goal, 100)
+
+    def test_incomplete_profile_falls_back_to_generic_defaults(self):
+        # No accounts.Profile at all -- e.g. signup wizard was abandoned after step 1.
+        response = self.client.get("/nutrition/daily/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        nutrition_profile = NutritionProfile.objects.get(user=self.user)
+        self.assertEqual(nutrition_profile.daily_calories_goal, 2000)
+        self.assertEqual(nutrition_profile.daily_protein_goal, 100)
+
+    def test_existing_nutrition_profile_is_never_recalculated_on_touch(self):
+        """Once seeded (calculated or default), later profile edits shouldn't silently overwrite user-picked goals."""
+        Profile.objects.create(
+            user=self.user, gender="male", date_of_birth=datetime.date(1998, 1, 1),
+            activity_level="moderately_active", current_weight_kg=75, height_ft=5, height_in=10,
+        )
+        self.client.get("/nutrition/daily/")  # first touch -- seeds calculated goals
+        nutrition_profile = NutritionProfile.objects.get(user=self.user)
+        nutrition_profile.daily_calories_goal = 1800  # user manually overrides
+        nutrition_profile.save()
+
+        self.client.get("/nutrition/daily/")  # second touch
+        nutrition_profile.refresh_from_db()
+        self.assertEqual(nutrition_profile.daily_calories_goal, 1800)
+
+
+class AutoRecalculateToggleTests(APITestCase):
+    """
+    Covers the explicit user-controlled setting (see
+    accounts.tests.NutritionGoalSyncTests for the accounts-side trigger
+    points): auto_recalculate_goals is a plain on/off switch, not an
+    inferred state -- while on, a weight/profile change always overwrites
+    goals, even ones the user typed in by hand; while off, nothing
+    recalculates automatically, period.
+    """
+
+    def setUp(self):
+        self.user = Account.objects.create_user(email="a@test.com", password="pass12345")
+        Profile.objects.create(
+            user=self.user, gender="male", date_of_birth=datetime.date(1998, 1, 1),
+            activity_level="moderately_active", current_weight_kg=75, height_ft=5, height_in=10,
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_defaults_to_enabled_on_first_seed(self):
+        self.client.get("/nutrition/daily/")
+        nutrition_profile = NutritionProfile.objects.get(user=self.user)
+        self.assertTrue(nutrition_profile.auto_recalculate_goals)
+
+    def test_manual_goal_edit_does_not_disable_the_setting(self):
+        """Editing a number is not the same action as flipping the toggle off."""
+        self.client.get("/nutrition/daily/")
+        self.client.patch("/nutrition/profile/", {"daily_calories_goal": 1800})
+        nutrition_profile = NutritionProfile.objects.get(user=self.user)
+        self.assertEqual(nutrition_profile.daily_calories_goal, 1800)
+        self.assertTrue(nutrition_profile.auto_recalculate_goals)
+
+    def test_enabled_setting_overwrites_a_manually_typed_goal_on_next_stat_change(self):
+        self.client.get("/nutrition/daily/")
+        self.client.patch("/nutrition/profile/", {"daily_calories_goal": 1800})
+
+        self.user.refresh_from_db()
+        self.client.patch("/accounts/profile/", {"activity_level": "very_active"})
+
+        nutrition_profile = NutritionProfile.objects.get(user=self.user)
+        self.assertNotEqual(nutrition_profile.daily_calories_goal, 1800)
+
+    def test_disabling_setting_stops_all_future_auto_recalculation(self):
+        self.client.get("/nutrition/daily/")
+        self.client.patch("/nutrition/profile/", {"auto_recalculate_goals": False})
+        self.client.patch("/nutrition/profile/", {"daily_calories_goal": 1800})
+
+        self.user.refresh_from_db()
+        self.client.patch("/accounts/profile/", {"activity_level": "very_active"})
+
+        nutrition_profile = NutritionProfile.objects.get(user=self.user)
+        self.assertEqual(nutrition_profile.daily_calories_goal, 1800)  # untouched
+        self.assertFalse(nutrition_profile.auto_recalculate_goals)
+
+    def test_re_enabling_setting_resumes_auto_recalculation(self):
+        self.client.get("/nutrition/daily/")
+        self.client.patch("/nutrition/profile/", {"auto_recalculate_goals": False})
+        self.client.patch("/nutrition/profile/", {"daily_calories_goal": 1800})
+
+        self.client.patch("/nutrition/profile/", {"auto_recalculate_goals": True})
+        self.user.refresh_from_db()
+        self.client.patch("/accounts/profile/", {"activity_level": "very_active"})
+
+        nutrition_profile = NutritionProfile.objects.get(user=self.user)
+        self.assertNotEqual(nutrition_profile.daily_calories_goal, 1800)
 
 
 class FoodEntryTests(APITestCase):

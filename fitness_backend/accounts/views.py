@@ -6,6 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Profile, WeightLog
 from .serializers import AccountSerializer, ProfileSerializer, RegisterSerializer, WeightLogSerializer
+from nutrition.services.goal_calculator import sync_calculated_goals
 
 
 class RegisterView(generics.CreateAPIView):
@@ -57,6 +58,13 @@ class ProfileView(generics.RetrieveUpdateAPIView):
         profile, _ = Profile.objects.get_or_create(user=self.request.user)
         return profile
 
+    def perform_update(self, serializer):
+        serializer.save()
+        # Height/age/gender/activity level/goal all feed the nutrition
+        # goal calculation -- keep it in sync (or flag it for review, if
+        # the user has since customized their goals by hand).
+        sync_calculated_goals(self.request.user)
+
 
 class MeView(APIView):
     """GET /accounts/me/  -- full account + profile, for the Profile page."""
@@ -79,6 +87,7 @@ def _sync_current_weight(user):
     latest = WeightLog.objects.filter(user=user).order_by("-logged_at", "-created_at").first()
     profile.current_weight_kg = latest.weight_kg if latest else None
     profile.save(update_fields=["current_weight_kg"])
+    sync_calculated_goals(user)
 
 
 class WeightLogListCreateView(generics.ListCreateAPIView):

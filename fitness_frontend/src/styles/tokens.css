@@ -632,6 +632,7 @@ label {
 
 @media (min-width: 900px) {
   .history-detail {
+    width: 100%;
     max-width: 900px;
     margin: 0 auto;
   }
@@ -639,6 +640,7 @@ label {
 
 @media (min-width: 900px) {
   .template-editor {
+    width: 100%;
     max-width: 800px;
     margin: 0 auto;
   }
@@ -646,6 +648,7 @@ label {
 
 @media (min-width: 900px) {
   .active-workout {
+    width: 100%;
     max-width: 800px;
     margin: 0 auto;
   }
@@ -680,8 +683,17 @@ label {
 }
 
 @media (min-width: 900px) {
-  .nutrition-summary-card {
-    max-width: 900px;
+  .nutrition-content {
+    width: 100%;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+}
+
+@media (min-width: 900px) {
+  .nutrition-date-nav {
+    /* width: 100%; */
+    max-width: 360px;
     margin: 0 auto;
   }
 }
@@ -716,7 +728,45 @@ label {
 }
 
 .nutrition-actions {
+  width: 100%;
+  max-width: 700px;
   margin-bottom: 16px;
+}
+
+@media (min-width: 900px) {
+  .food-search-results-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .food-search-results-grid .card {
+    margin-bottom: 0 !important;
+  }
+}
+
+@media (min-width: 900px) {
+  .food-detail {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+}
+
+@media (min-width: 900px) {
+  .nutrition-settings {
+    /* width: 100%; */
+    max-width: 800px;
+    margin: 0 auto;
+  }
+}
+
+@media (min-width: 900px) {
+  .nutrition-trends {
+    /* width: 100%; */
+    max-width: 900px;
+    margin: 0 auto;
+  }
 }
 
 @media (min-width: 900px) {
@@ -741,6 +791,7 @@ label {
 
 @media (min-width: 900px) {
   .chat-detail {
+    width: 100%;
     max-width: 900px;
     margin: 0 auto;
   }
@@ -784,6 +835,7 @@ label {
 
 @media (min-width: 900px) {
   .report-detail {
+    width: 100%;
     max-width: 1000px;
     margin: 0 auto;
   }
@@ -803,6 +855,7 @@ label {
 
 @media (min-width: 900px) {
   .profile-card {
+    width: 100%;
     max-width: 800px;
     margin: 0 auto;
   }
@@ -810,6 +863,7 @@ label {
 
 @media (min-width: 900px) {
   .weight-progress-card {
+    width: 100%;
     max-width: 800px;
     margin: 0 auto;
   }

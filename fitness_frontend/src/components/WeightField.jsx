@@ -12,8 +12,10 @@ export default function WeightField({
   required = false,
   placeholder,
   autoFocus = false,
+  defaultUnit = "kg",
+  allowToggle = true,
 }) {
-  const [unit, setUnit] = useState("kg");
+  const [unit, setUnit] = useState(defaultUnit);
   const [lbsDraft, setLbsDraft] = useState(() => (kg ? String(kgToLbs(Number(kg))) : ""));
 
   function switchUnit(next) {
@@ -35,11 +37,15 @@ export default function WeightField({
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
         <label style={{ marginBottom: 0 }}>{label}</label>
-        <UnitToggle
-          options={[{ value: "kg", label: "kg" }, { value: "lbs", label: "lbs" }]}
-          value={unit}
-          onChange={switchUnit}
-        />
+        {allowToggle ? (
+          <UnitToggle
+            options={[{ value: "kg", label: "kg" }, { value: "lbs", label: "lbs" }]}
+            value={unit}
+            onChange={switchUnit}
+          />
+        ) : (
+          <span style={{ fontSize: 11, color: "var(--text-faint)" }}>{unit}</span>
+        )}
       </div>
 
       {unit === "kg" ? (

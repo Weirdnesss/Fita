@@ -3,6 +3,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from .models import Profile, WeightLog
+from nutrition.models import NutritionProfile
+
+import datetime
 
 Account = get_user_model()
 
@@ -141,3 +144,55 @@ class WeightLogTests(APITestCase):
         entry = WeightLog.objects.create(user=self.other, weight_kg=80, logged_at="2026-09-01")
         response = self.client.delete(f"/accounts/weight-logs/{entry.id}/")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class NutritionGoalSyncTests(APITestCase):
+    """
+    accounts changes (weight logs, Profile edits) should keep nutrition
+    goals fresh via sync_calculated_goals() -- but only while
+    auto_recalculate_goals is on (the default); see nutrition.tests for
+    the toggle itself.
+    """
+
+    def setUp(self):
+        self.user = Account.objects.create_user(email="a@test.com", password="pass12345")
+        Profile.objects.create(
+            user=self.user, gender="male", date_of_birth=datetime.date(1998, 1, 1),
+            activity_level="moderately_active", height_ft=5, height_in=10,
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_logging_weight_seeds_nutrition_profile_with_calculated_goals(self):
+        # No NutritionProfile exists yet -- logging a weight (which is
+        # itself a required field for the calculation) should trigger
+        # get_or_create's own seeding path the next time nutrition is
+        # touched, not create one here directly. sync_calculated_goals
+        # is a no-op with no NutritionProfile yet.
+        self.client.post("/accounts/weight-logs/", {"weight_kg": 75, "logged_at": "2026-09-01"})
+        self.assertFalse(NutritionProfile.objects.filter(user=self.user).exists())
+
+    def test_weight_change_updates_existing_unedited_nutrition_goals(self):
+        self.client.post("/accounts/weight-logs/", {"weight_kg": 75, "logged_at": "2026-09-01"})
+        self.user.refresh_from_db()  # picks up current_weight_kg set via a separate query in _sync_current_weight
+        self.client.get("/nutrition/daily/")  # first touch -- seeds calculated goals
+        original = NutritionProfile.objects.get(user=self.user).daily_calories_goal
+
+        # force_authenticate reuses one Python `self.user` object across every
+        # client call in this test -- a real request always fetches a fresh
+        # one, so refresh here to match that (see get_or_create_nutrition_profile
+        # / sync_calculated_goals, both of which read the cached user.profile).
+        self.user.refresh_from_db()
+        self.client.post("/accounts/weight-logs/", {"weight_kg": 95, "logged_at": "2026-09-02"})
+        updated = NutritionProfile.objects.get(user=self.user).daily_calories_goal
+        self.assertNotEqual(original, updated)
+
+    def test_profile_edit_updates_existing_unedited_nutrition_goals(self):
+        self.client.post("/accounts/weight-logs/", {"weight_kg": 75, "logged_at": "2026-09-01"})
+        self.user.refresh_from_db()
+        self.client.get("/nutrition/daily/")
+        original = NutritionProfile.objects.get(user=self.user).daily_calories_goal
+
+        self.user.refresh_from_db()
+        self.client.patch("/accounts/profile/", {"activity_level": "very_active"})
+        updated = NutritionProfile.objects.get(user=self.user).daily_calories_goal
+        self.assertNotEqual(original, updated)

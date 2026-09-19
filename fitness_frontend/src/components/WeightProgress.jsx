@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { logWeight, listWeightLogs, deleteWeightLog, updateProfile } from "../api/accounts";
 import { Loading, ErrorBanner, extractErrorMessage } from "./Status";
 import WeightField from "./WeightField";
+import { formatWeight, formatWeightDelta } from "../lib/profile";
 import ConfirmDialog from "./ConfirmDialog";
 import { useToast } from "../context/ToastContext";
 
@@ -13,6 +15,7 @@ const todayStr = () => new Date().toISOString().split("T")[0];
 // here as one section rather than a separate page/route.
 export default function WeightProgress() {
   const { user, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const showToast = useToast();
   const [logs, setLogs] = useState(null);
   const [weightKg, setWeightKg] = useState("");
@@ -20,7 +23,6 @@ export default function WeightProgress() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState("");
-  const [showHistory, setShowHistory] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null); // { id, weightKg } | null
 
   const [editingGoal, setEditingGoal] = useState(false);
@@ -69,7 +71,7 @@ export default function WeightProgress() {
       await deleteWeightLog(id);
       await load();
       await refreshUser();
-      showToast(`Removed ${weightKg} kg entry`, "success");
+      showToast(`Removed ${formatWeight(weightKg, unitSystem)} entry`, "success");
     } catch (err) {
       showToast(extractErrorMessage(err, "Couldn't delete that entry."), "error");
     } finally {
@@ -93,6 +95,7 @@ export default function WeightProgress() {
   }
 
   const currentGoal = user?.profile?.goal_weight_kg ?? null;
+  const unitSystem = user?.profile?.unit_system || "metric";
 
   return (
     <div className="card weight-progress-card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -103,7 +106,7 @@ export default function WeightProgress() {
           <p className="eyebrow">Goal weight</p>
           {!editingGoal && (
             <p style={{ fontSize: 20, fontWeight: 700 }}>
-              {currentGoal != null ? `${currentGoal} kg` : "Not set"}
+              {currentGoal != null ? formatWeight(currentGoal, unitSystem) : "Not set"}
             </p>
           )}
         </div>
@@ -125,6 +128,8 @@ export default function WeightProgress() {
             kg={goalWeightKg}
             onChange={setGoalWeightKg}
             placeholder="e.g. 75"
+            defaultUnit={unitSystem === "imperial" ? "lbs" : "kg"}
+            allowToggle={false}
           />
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={handleSaveGoal} disabled={savingGoal}>
@@ -146,7 +151,7 @@ export default function WeightProgress() {
           </p>
         )}
         {logs !== null && logs.length >= 2 && (
-          <WeightChart logs={logs} goalWeightKg={currentGoal} primaryGoal={user?.profile?.primary_goal} />
+          <WeightChart logs={logs} goalWeightKg={currentGoal} primaryGoal={user?.profile?.primary_goal} unitSystem={unitSystem} />
         )}
       </div>
 
@@ -159,6 +164,8 @@ export default function WeightProgress() {
               kg={weightKg}
               onChange={setWeightKg}
               placeholder="e.g. 78.5"
+              defaultUnit={unitSystem === "imperial" ? "lbs" : "kg"}
+              allowToggle={false}
             />
           </div>
           <div>
@@ -174,41 +181,78 @@ export default function WeightProgress() {
       </form>
 
       <div>
-        <button
-          className="btn-ghost"
-          style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "var(--text-dim)" }}
-          onClick={() => setShowHistory((s) => !s)}
-        >
-          {showHistory ? "Hide history" : `Show history${logs ? ` (${logs.length})` : ""}`}
-        </button>
-        {showHistory && (
-          <div style={{ marginTop: 10 }}>
-            {logs !== null && logs.length === 0 && (
-              <p style={{ fontSize: 13, color: "var(--text-faint)" }}>No entries yet -- log your first weight above.</p>
-            )}
-            {logs?.map((entry) => (
-              <div key={entry.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-                <div>
-                  <p style={{ fontWeight: 600, fontSize: 14 }}>{entry.weight_kg} kg</p>
-                  <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{entry.logged_at}</p>
-                </div>
-                <button
-                  className="btn-ghost"
-                  style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 12, padding: 6 }}
-                  onClick={() => setPendingDelete({ id: entry.id, weightKg: entry.weight_kg })}
-                  disabled={deletingId === entry.id}
-                >
-                  {deletingId === entry.id ? "Removing..." : "Remove"}
-                </button>
-              </div>
-            ))}
-          </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <p className="eyebrow" style={{ margin: 0 }}>
+            Recent entries
+          </p>
+
+          <button
+            className="btn-ghost"
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              fontSize: 13,
+              color: "var(--text-dim)",
+            }}
+            onClick={() => navigate("weight")}
+          >
+            View Weight Log →
+          </button>
+        </div>
+
+        {logs !== null && logs.length === 0 && (
+          <p style={{ fontSize: 13, color: "var(--text-faint)" }}>
+            No entries yet — log your first weight above.
+          </p>
         )}
+
+        {logs?.slice(0, 5).map((entry) => (
+          <div
+            key={entry.id}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "8px 0",
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
+            <div>
+              <p style={{ fontWeight: 600, fontSize: 14 }}>
+                {formatWeight(entry.weight_kg, unitSystem)}
+              </p>
+              <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                {entry.logged_at}
+              </p>
+            </div>
+
+            <button
+              className="btn-ghost"
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--chili)",
+                fontSize: 12,
+                padding: 6,
+              }}
+              onClick={() =>
+                setPendingDelete({
+                  id: entry.id,
+                  weightKg: entry.weight_kg,
+                })
+              }
+              disabled={deletingId === entry.id}
+            >
+              {deletingId === entry.id ? "Removing..." : "Remove"}
+            </button>
+          </div>
+        ))}
       </div>
         <ConfirmDialog
         open={pendingDelete !== null}
         title="Remove entry"
-        message={pendingDelete ? `Remove the ${pendingDelete.weightKg} kg entry? This can't be undone.` : ""}
+        message={pendingDelete ? `Remove the ${formatWeight(pendingDelete.weightKg, unitSystem)} entry? This can't be undone.` : ""}
         confirmLabel="Remove"
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
@@ -235,7 +279,7 @@ function goalWeightDirection(primaryGoal) {
   return null;
 }
 
-function WeightChart({ logs, goalWeightKg, primaryGoal }) {
+function WeightChart({ logs, goalWeightKg, primaryGoal, unitSystem = "metric" }) {
   const width = 320;
   const height = 150;
   const padding = { top: 14, right: 14, bottom: 20, left: 14 };
@@ -266,6 +310,7 @@ function WeightChart({ logs, goalWeightKg, primaryGoal }) {
   const latest = chronological[chronological.length - 1];
   const first = chronological[0];
   const change = Math.round((latest.weight_kg - first.weight_kg) * 10) / 10;
+  const changeDelta = formatWeightDelta(change, unitSystem);
   const direction = goalWeightDirection(primaryGoal);
   const isGoodChange = change === 0 ? null : direction === "down" ? change < 0 : direction === "up" ? change > 0 : null;
   const changeColor = isGoodChange === null ? "var(--text)" : isGoodChange ? "var(--bamboo)" : "var(--chili)";
@@ -288,13 +333,13 @@ function WeightChart({ logs, goalWeightKg, primaryGoal }) {
         <text x={width - padding.right} y={height - 4} fontSize="9" fill="var(--text-faint)" textAnchor="end">{latest.logged_at}</text>
       </svg>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12, color: "var(--text-faint)" }}>
-        <span>Latest: <strong style={{ color: "var(--text)" }}>{latest.weight_kg} kg</strong></span>
+        <span>Latest: <strong style={{ color: "var(--text)" }}>{formatWeight(latest.weight_kg, unitSystem)}</strong></span>
         <span>
           Change: <strong style={{ color: changeColor }}>
-            {change > 0 ? "+" : ""}{change} kg
+            {changeDelta.value > 0 ? "+" : ""}{changeDelta.value} {changeDelta.unit}
           </strong>
         </span>
-        {goalWeightKg != null && <span>Goal: <strong style={{ color: "var(--turmeric)" }}>{goalWeightKg} kg</strong></span>}
+        {goalWeightKg != null && <span>Goal: <strong style={{ color: "var(--turmeric)" }}>{formatWeight(goalWeightKg, unitSystem)}</strong></span>}
       </div>
     </div>
   );

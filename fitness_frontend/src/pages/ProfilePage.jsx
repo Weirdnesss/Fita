@@ -5,7 +5,7 @@ import PageHeader from "../components/PageHeader";
 import WeightProgress from "../components/WeightProgress";
 import { Loading } from "../components/Status";
 import ConfirmDialog from "../components/ConfirmDialog";
-import { isProfileIncomplete } from "../lib/profile";
+import { isProfileIncomplete, formatHeight } from "../lib/profile";
 
 export default function ProfilePage() {
   const { user, loading, logout } = useAuth();
@@ -38,7 +38,7 @@ export default function ProfilePage() {
           <button
             className="btn btn-primary"
             style={{ padding: "8px 14px", fontSize: 13, flexShrink: 0 }}
-            onClick={() => navigate("/profile/edit")}
+            onClick={() => navigate("/onboarding")}
           >
             Finish
           </button>
@@ -81,7 +81,7 @@ export default function ProfilePage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
                   <DetailRow label="Primary goal" value={formatChoice(profile.primary_goal)} />
                   <DetailRow label="Activity level" value={formatChoice(profile.activity_level)} />
-                  <DetailRow label="Height" value={profile.height_cm ? `${profile.height_cm} cm` : "--"} />
+                  <DetailRow label="Height" value={formatHeight(profile.height_ft, profile.height_in, profile.unit_system) || "--"} />
                   <DetailRow label="Workout frequency" value={profile.workout_frequency ? `${profile.workout_frequency} / week` : "--"} />
                   <DetailRow label="Workout location" value={formatChoice(profile.workout_location)} />
                   {profile.medical_conditions && <DetailRow label="Medical conditions" value={profile.medical_conditions} />}

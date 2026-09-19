@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { logWeight, listWeightLogs, deleteWeightLog, updateProfile } from "../api/accounts";
 import PageHeader from "../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../components/Status";
+import WeightField from "../components/WeightField";
+import { formatWeight, formatWeightDelta } from "../lib/profile";
 import { useToast } from "../context/ToastContext";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
 export default function WeightLog() {
   const { user, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const showToast = useToast();
   const [logs, setLogs] = useState(null);
   const [weightKg, setWeightKg] = useState("");
@@ -86,9 +90,10 @@ export default function WeightLog() {
   }
 
   const currentGoal = user?.profile?.goal_weight_kg ?? null;
+  const unitSystem = user?.profile?.unit_system || "metric";
 
   return (
-    <div className="page">
+    <div className="page page-narrow">
       <PageHeader title="Weight Progress" back backTo="/profile" />
 
       <div className="card" style={{ marginBottom: 12 }}>
@@ -97,7 +102,7 @@ export default function WeightLog() {
             <p className="eyebrow">Goal weight</p>
             {!editingGoal && (
               <p style={{ fontSize: 20, fontWeight: 700 }}>
-                {currentGoal != null ? `${currentGoal} kg` : "Not set"}
+                {currentGoal != null ? formatWeight(currentGoal, unitSystem) : "Not set"}
               </p>
             )}
           </div>
@@ -112,18 +117,24 @@ export default function WeightLog() {
           )}
         </div>
         {editingGoal && (
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <input
-              type="number" step="0.1" autoFocus placeholder="e.g. 75"
-              value={goalWeightKg} onChange={(e) => setGoalWeightKg(e.target.value)}
-              style={{ flex: 1 }}
+          <div style={{ marginTop: 10 }}>
+            <WeightField
+              autoFocus
+              label="Goal weight"
+              kg={goalWeightKg}
+              onChange={setGoalWeightKg}
+              placeholder="e.g. 75"
+              defaultUnit={unitSystem === "imperial" ? "lbs" : "kg"}
+              allowToggle={false}
             />
-            <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleSaveGoal} disabled={savingGoal}>
-              {savingGoal ? "Saving..." : "Save"}
-            </button>
-            <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => setEditingGoal(false)} disabled={savingGoal}>
-              Cancel
-            </button>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={handleSaveGoal} disabled={savingGoal}>
+                {savingGoal ? "Saving..." : "Save"}
+              </button>
+              <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={() => setEditingGoal(false)} disabled={savingGoal}>
+                Cancel
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -136,14 +147,21 @@ export default function WeightLog() {
             Log at least 2 entries to see a trend graph.
           </p>
         )}
-        {logs !== null && logs.length >= 2 && <WeightChart logs={logs} goalWeightKg={currentGoal} />}
+        {logs !== null && logs.length >= 2 && <WeightChart logs={logs} goalWeightKg={currentGoal} unitSystem={unitSystem} />}
       </div>
 
       <form onSubmit={handleSubmit} className="card" style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div>
-            <label>Weight (kg)</label>
-            <input type="number" step="0.1" required value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="e.g. 78.5" />
+            <WeightField
+              required
+              label="Weight"
+              kg={weightKg}
+              onChange={setWeightKg}
+              placeholder="e.g. 78.5"
+              defaultUnit={unitSystem === "imperial" ? "lbs" : "kg"}
+              allowToggle={false}
+            />
           </div>
           <div>
             <label>Date</label>
@@ -166,7 +184,7 @@ export default function WeightLog() {
         {logs?.map((entry) => (
           <div key={entry.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
             <div>
-              <p style={{ fontWeight: 600, fontSize: 14 }}>{entry.weight_kg} kg</p>
+              <p style={{ fontWeight: 600, fontSize: 14 }}>{formatWeight(entry.weight_kg, unitSystem)}</p>
               <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{entry.logged_at}</p>
             </div>
             <button
@@ -190,7 +208,7 @@ export default function WeightLog() {
 // optional dashed reference line for goal weight. `logs` comes in
 // most-recent-first (the API's default ordering), so it's reversed
 // here to plot left-to-right chronologically.
-function WeightChart({ logs, goalWeightKg }) {
+function WeightChart({ logs, goalWeightKg, unitSystem = "metric" }) {
   const width = 320;
   const height = 150;
   const padding = { top: 14, right: 14, bottom: 20, left: 14 };
@@ -221,6 +239,7 @@ function WeightChart({ logs, goalWeightKg }) {
   const latest = chronological[chronological.length - 1];
   const first = chronological[0];
   const change = Math.round((latest.weight_kg - first.weight_kg) * 10) / 10;
+  const changeDelta = formatWeightDelta(change, unitSystem);
 
   return (
     <div>
@@ -240,13 +259,13 @@ function WeightChart({ logs, goalWeightKg }) {
         <text x={width - padding.right} y={height - 4} fontSize="9" fill="var(--text-faint)" textAnchor="end">{latest.logged_at}</text>
       </svg>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12, color: "var(--text-faint)" }}>
-        <span>Latest: <strong style={{ color: "var(--text)" }}>{latest.weight_kg} kg</strong></span>
+        <span>Latest: <strong style={{ color: "var(--text)" }}>{formatWeight(latest.weight_kg, unitSystem)}</strong></span>
         <span>
           Change: <strong style={{ color: change < 0 ? "var(--bamboo)" : change > 0 ? "var(--chili)" : "var(--text)" }}>
-            {change > 0 ? "+" : ""}{change} kg
+            {changeDelta.value > 0 ? "+" : ""}{changeDelta.value} {changeDelta.unit}
           </strong>
         </span>
-        {goalWeightKg != null && <span>Goal: <strong style={{ color: "var(--turmeric)" }}>{goalWeightKg} kg</strong></span>}
+        {goalWeightKg != null && <span>Goal: <strong style={{ color: "var(--turmeric)" }}>{formatWeight(goalWeightKg, unitSystem)}</strong></span>}
       </div>
     </div>
   );

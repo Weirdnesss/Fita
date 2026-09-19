@@ -49,6 +49,7 @@ class NutritionProfileSerializer(serializers.ModelSerializer):
             "daily_protein_goal",
             "daily_carbs_goal",
             "daily_fat_goal",
+            "auto_recalculate_goals",
         ]
 
 
