@@ -16,6 +16,7 @@ import TemplateEditor from "./pages/workouts/TemplateEditor";
 import ActiveWorkout from "./pages/workouts/ActiveWorkout";
 import HistoryDetail from "./pages/workouts/HistoryDetail";
 import HistoryList from "./pages/workouts/HistoryList";
+import WorkoutTrends from "./pages/workouts/WorkoutTrends";
 
 import NutritionDashboard from "./pages/nutrition/NutritionDashboard";
 import FoodSearch from "./pages/nutrition/FoodSearch";
@@ -24,7 +25,6 @@ import NutritionTrends from "./pages/nutrition/NutritionTrends";
 
 import ChatList from "./pages/coach/ChatList";
 import ChatDetail from "./pages/coach/ChatDetail";
-import ChatHistory from "./pages/coach/ChatHistory";
 
 import ReportsList from "./pages/progress/ReportsList";
 import ReportDetail from "./pages/progress/ReportDetail";
@@ -65,6 +65,7 @@ export default function App() {
               <Route path="/workouts/templates/:id/start" element={<ActiveWorkout />} />
               <Route path="/workouts/history/:id" element={<HistoryDetail />} />
               <Route path="/workouts/history" element={<HistoryList />} />
+              <Route path="/workouts/trends" element={<WorkoutTrends />} />
 
               <Route path="/nutrition" element={<NutritionDashboard />} />
               <Route path="/nutrition/search" element={<FoodSearch />} />
@@ -72,7 +73,6 @@ export default function App() {
               <Route path="/nutrition/trends" element={<NutritionTrends />} />
 
               <Route path="/coach" element={<ChatList />} />
-              <Route path="/coach/chats" element={<ChatHistory />} />
               <Route path="/coach/:id" element={<ChatDetail />} />
 
               <Route path="/progress" element={<ReportsList />} />

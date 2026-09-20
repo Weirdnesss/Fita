@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
+import HeightField from "../../components/HeightField";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { useToast } from "../../context/ToastContext";
 import { getNutritionProfile, updateNutritionProfile, getSuggestedGoals } from "../../api/nutrition";
@@ -33,7 +34,7 @@ export default function NutritionSettings() {
 
   const [missingFields, setMissingFields] = useState(null); // null = not checked yet
   const [aboutYou, setAboutYou] = useState({
-    current_weight_kg: "", height_ft: "", height_in: "", date_of_birth: "", gender: "",
+    current_weight_kg: "", heightCm: "", date_of_birth: "", gender: "",
   });
   const [suggestion, setSuggestion] = useState(null);
   const [showCalcDetails, setShowCalcDetails] = useState(false);
@@ -71,8 +72,7 @@ export default function NutritionSettings() {
       const payload = {};
       if (missingFields.includes("current_weight_kg")) payload.current_weight_kg = Number(aboutYou.current_weight_kg);
       if (missingFields.includes("height_cm")) {
-        payload.height_ft = Number(aboutYou.height_ft);
-        payload.height_in = Number(aboutYou.height_in || 0);
+        payload.height_cm = Number(aboutYou.heightCm);
       }
       if (missingFields.includes("age")) payload.date_of_birth = aboutYou.date_of_birth;
       if (missingFields.includes("gender")) payload.gender = aboutYou.gender;
@@ -155,7 +155,7 @@ export default function NutritionSettings() {
   });
 
   return (
-    <div className="page nutrition-settings">
+    <div className="page">
       <PageHeader title="Nutrition Goals" subtitle="Your daily targets, used on the Nutrition dashboard" back />
 
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -202,18 +202,11 @@ export default function NutritionSettings() {
               </div>
             )}
             {missingFields.includes("height_cm") && (
-              <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <label>Height (ft)</label>
-                  <input type="number" min="3" max="8" value={aboutYou.height_ft}
-                    onChange={(e) => setAboutYou((a) => ({ ...a, height_ft: e.target.value }))} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label>Height (in)</label>
-                  <input type="number" min="0" max="11" value={aboutYou.height_in}
-                    onChange={(e) => setAboutYou((a) => ({ ...a, height_in: e.target.value }))} />
-                </div>
-              </div>
+              <HeightField
+                required
+                cm={aboutYou.heightCm}
+                onChange={(cm) => setAboutYou((a) => ({ ...a, heightCm: cm }))}
+              />
             )}
             {missingFields.includes("age") && (
               <div>

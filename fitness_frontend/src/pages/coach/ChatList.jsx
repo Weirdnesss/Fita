@@ -6,6 +6,8 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 import { listChats, createChat, deleteChat } from "../../api/coach";
 
+const CHATS_PER_PAGE = 10;
+
 export default function ChatList() {
   const navigate = useNavigate();
   const showToast = useToast();
@@ -13,11 +15,17 @@ export default function ChatList() {
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null); // { id, title } | null
-  const recentChats = chats?.slice(0, 6);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     listChats().then(setChats).catch((err) => setError(extractErrorMessage(err)));
   }, []);
+
+  useEffect(() => {
+    if (!chats) return;
+    const totalPages = Math.max(1, Math.ceil(chats.length / CHATS_PER_PAGE));
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [chats, currentPage]);
 
   async function handleNewChat() {
     setCreating(true);
@@ -43,34 +51,46 @@ export default function ChatList() {
     }
   }
 
+  const totalPages = chats ? Math.max(1, Math.ceil(chats.length / CHATS_PER_PAGE)) : 0;
+  const startIndex = (currentPage - 1) * CHATS_PER_PAGE;
+  const paginatedChats = chats ? chats.slice(startIndex, startIndex + CHATS_PER_PAGE) : [];
+
   return (
     <div className="page">
       <PageHeader title="Fitness Assistant" subtitle="Chat for explanations and recommendations" />
       <ErrorBanner message={error} />
-  
-      <div style={{ display: "flex", justifyContent: "right", marginTop: 8, gap: 8 }}>
-        <button className="btn btn-primary chat-new-button" onClick={handleNewChat} disabled={creating}>
-          {creating ? "Starting..." : "+ New Chat"}
-        </button>
-        <button
-          className="btn btn-secondary"
-          onClick={() => navigate("/coach/chats")}
-        >
-          Show All Chats
-        </button>
-      </div>
+
+      <button className="btn btn-primary chat-new-button" onClick={handleNewChat} disabled={creating}>
+        {creating ? "Starting..." : "+ New Chat"}
+      </button>
 
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
           <h3>Previous Chats</h3>
           <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{chats ? `${chats.length} chats` : ""}</span>
         </div>
+
         {chats === null && <Loading />}
         {chats?.length === 0 && (
           <EmptyState title="No chats yet" eyebrow="Start a new chat to get personalized fitness recommendations." />
         )}
+
+        {chats?.length > CHATS_PER_PAGE && (
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            <button className="btn btn-secondary" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}>
+              Previous
+            </button>
+            <span style={{ fontSize: 13, color: "var(--text-faint)" }}>
+              Page {currentPage} of {totalPages}
+            </span>
+            <button className="btn btn-secondary" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
+              Next
+            </button>
+          </div>
+        )}
+
         <div className="chat-list-grid">
-        {recentChats?.map((c) => (
+        {paginatedChats.map((c) => (
           <div key={c.id} className="card card-tab" style={{ marginBottom: 10, cursor: "pointer" }} onClick={() => navigate(`/coach/${c.id}`)}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <p style={{ fontWeight: 600 }}>{c.title}</p>
@@ -85,16 +105,6 @@ export default function ChatList() {
           </div>
         ))}
         </div>
-        {/* {chats && chats.length > 5 && (
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-            <button
-              className="btn btn-secondary"
-              onClick={() => navigate("/coach/chats")}
-            >
-              Show All Chats
-            </button>
-          </div>
-        )} */}
       </div>
 
       <ConfirmDialog

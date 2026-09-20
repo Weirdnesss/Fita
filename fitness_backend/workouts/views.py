@@ -1,5 +1,7 @@
-from django.db.models import Q
+from django.db.models import Count, Q
+from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -31,19 +33,18 @@ class ExerciseSearchView(APIView):
     to populate/refresh this cache. If it's empty (never synced),
     this returns an empty list with a hint rather than an error.
 
-    q is optional when category is given, so category-only browsing
-    works the same way nutrition's FoodSearchView supports it.
+    With no q and no category, lists everything (paginated) rather
+    than returning empty -- mirrors nutrition.views.FoodSearchView, so
+    the exercise picker can show a browsable default list instead of
+    requiring the user to type first.
+
     Paginated via `offset` (default 0), page size PAGE_SIZE --
     response includes `next_offset` (null once there's nothing more
     to load).
 
-    Results now include description/equipment_name/muscle_names so a
+    Results include description/equipment_name/muscle_names so a
     client can render a detail view straight from the search response
-    without a second request (mirrors FoodSearchView's shape). This
-    is additive -- the existing TemplateEditor exercise picker
-    (api/workouts.js's searchExercises) only reads `.results` and the
-    fields it already used (wger_exercise_id, name, category) are
-    unchanged, so it keeps working as-is.
+    without a second request (mirrors FoodSearchView's shape).
     """
 
     PAGE_SIZE = 20
@@ -51,9 +52,6 @@ class ExerciseSearchView(APIView):
     def get(self, request):
         term = request.query_params.get("q", "").strip()
         category = request.query_params.get("category", "").strip()
-
-        if not term and not category:
-            return Response({"count": 0, "results": [], "next_offset": None})
 
         if not WgerExercise.objects.exists():
             return Response(
@@ -96,6 +94,25 @@ class ExerciseSearchView(APIView):
             "results": results,
             "next_offset": next_offset if next_offset < total else None,
         })
+
+
+class ExerciseCategoryListView(APIView):
+    """
+    GET /workouts/exercises/categories/
+    Distinct category names actually present in the synced WgerExercise
+    cache (e.g. "Chest", "Back", "Legs") -- fetched dynamically rather
+    than hardcoded on the frontend, since these come from wger's data
+    and category_name is free text, not a fixed choice set.
+    """
+
+    def get(self, request):
+        categories = (
+            WgerExercise.objects.exclude(category_name="")
+            .values_list("category_name", flat=True)
+            .distinct()
+            .order_by("category_name")
+        )
+        return Response(list(categories))
 
 
 class WorkoutTemplateListCreateView(generics.ListCreateAPIView):
@@ -401,3 +418,217 @@ class TemplateExerciseSwapView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
         return Response(WorkoutTemplateSerializer(template).data)
+
+class WorkoutTrendsView(APIView):
+    """
+    GET /workouts/trends/?period=week|month
+    Mirrors nutrition.views.NutritionTrendsView -- aggregates the trailing
+    7 (week) or 30 (month) days into per-day workout count and total
+    volume (sum of weight*reps across every set logged that day), plus a
+    streak and averages, for the Workouts Trends tab.
+
+    Volume is computed from sets_data, which is always stored in kg
+    regardless of which unit the user was viewing/entering in at the
+    time (see PerformedExercise.weight_unit's docstring) -- so no unit
+    conversion is needed here.
+
+    Averages are computed over days that actually have a completed
+    workout, not every day in the period -- same reasoning as nutrition's
+    averages: including rest days would understate real training load
+    and isn't useful feedback.
+    """
+
+    PERIOD_DAYS = {"week": 7, "month": 30}
+
+    def get(self, request):
+        period = request.query_params.get("period", "week")
+        num_days = self.PERIOD_DAYS.get(period)
+        if num_days is None:
+            return Response(
+                {"error": f"period must be one of {list(self.PERIOD_DAYS)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        today = timezone.localdate()
+        start_date = today - timezone.timedelta(days=num_days - 1)
+
+        histories = (
+            TemplateHistory.objects.filter(
+                user=request.user,
+                started_at__date__gte=start_date,
+                started_at__date__lte=today,
+            )
+            .prefetch_related("performed_exercises")
+        )
+
+        by_date = {}
+        for history in histories:
+            d = timezone.localtime(history.started_at).date()
+            bucket = by_date.setdefault(d, {"workouts": 0, "volume": 0.0, "sets": 0})
+            bucket["workouts"] += 1
+            for performed in history.performed_exercises.all():
+                for s in performed.sets_data:
+                    weight = s.get("weight") or 0
+                    reps = s.get("reps") or 0
+                    bucket["volume"] += weight * reps
+                    bucket["sets"] += 1
+
+        days = []
+        for i in range(num_days):
+            d = start_date + timezone.timedelta(days=i)
+            b = by_date.get(d)
+            days.append({
+                "date": d.isoformat(),
+                "workouts": b["workouts"] if b else 0,
+                "volume": round(b["volume"], 1) if b else 0,
+                "sets": b["sets"] if b else 0,
+                "logged": b is not None,
+            })
+
+        logged_days = [d for d in days if d["logged"]]
+        days_logged = len(logged_days)
+
+        def avg(field):
+            return round(sum(d[field] for d in logged_days) / days_logged, 1) if days_logged else 0
+
+        total_volume = round(sum(d["volume"] for d in days), 1)
+        previous_start = start_date - timezone.timedelta(days=num_days)
+        previous_end = start_date - timezone.timedelta(days=1)
+        previous_period_volume = round(self._total_volume(request.user, previous_start, previous_end), 1)
+        volume_change_pct = (
+            round((total_volume - previous_period_volume) / previous_period_volume * 100)
+            if previous_period_volume > 0
+            else None  # no prior data to compare against -- frontend shows nothing rather than a misleading "+inf%"
+        )
+
+        return Response({
+            "period": period,
+            "days": days,
+            "days_logged": days_logged,
+            "total_workouts": sum(d["workouts"] for d in days),
+            "total_volume": total_volume,
+            "previous_period_volume": previous_period_volume,
+            "volume_change_pct": volume_change_pct,
+            "averages": {
+                "volume": avg("volume"),
+                "sets": avg("sets"),
+            },
+            "current_streak": self._current_streak(request.user, today),
+        })
+
+    def _total_volume(self, user, start_date, end_date):
+        total = 0.0
+        performed = PerformedExercise.objects.filter(
+            history__user=user,
+            history__started_at__date__gte=start_date,
+            history__started_at__date__lte=end_date,
+        )
+        for p in performed:
+            for s in p.sets_data:
+                total += (s.get("weight") or 0) * (s.get("reps") or 0)
+        return total
+
+    def _current_streak(self, user, today):
+        # Consecutive days with at least one completed workout, walking
+        # backward from today. If today has nothing logged yet, start
+        # counting from yesterday instead -- today isn't "over" yet, so
+        # not having trained by noon shouldn't zero out an otherwise-
+        # intact streak. Mirrors NutritionTrendsView._current_streak.
+        logged_dates = set(
+            TemplateHistory.objects.filter(user=user)
+            .annotate(day=TruncDate("started_at"))
+            .values_list("day", flat=True)
+            .distinct()
+        )
+        cursor = today if today in logged_dates else today - timezone.timedelta(days=1)
+        streak = 0
+        while cursor in logged_dates:
+            streak += 1
+            cursor -= timezone.timedelta(days=1)
+        return streak
+
+
+class ExerciseFrequencyView(APIView):
+    """
+    GET /workouts/trends/exercises/
+    Lists the user's most-logged exercises (all-time), for populating the
+    exercise picker on the Trends page's progression chart. Sessions
+    count = number of distinct completed workouts that included the
+    exercise, not number of sets, so it reflects "how often do I train
+    this" rather than volume.
+    """
+
+    LIMIT = 15
+
+    def get(self, request):
+        rows = (
+            PerformedExercise.objects.filter(history__user=request.user)
+            .values("exercise_name")
+            .annotate(sessions=Count("history", distinct=True))
+            .order_by("-sessions", "exercise_name")[: self.LIMIT]
+        )
+        return Response([{"name": r["exercise_name"], "sessions": r["sessions"]} for r in rows])
+
+
+class ExerciseProgressionView(APIView):
+    """
+    GET /workouts/trends/exercise/?name=<exercise name>&period=month|3months|all
+    One exercise's per-session progression: for each session that
+    included it, the heaviest set logged (weight + the reps done at that
+    weight) and the total number of sets. This is deliberately simpler
+    than an estimated-1RM formula -- "your heaviest set each session" is
+    something a beginner can read at a glance, where a 1RM formula needs
+    explaining and can be misleading at high rep counts anyway.
+
+    period uses a longer window than the main trends view (30/90 days,
+    or all-time) since meaningful strength progression usually isn't
+    visible over just 7 days.
+    """
+
+    PERIOD_DAYS = {"month": 30, "3months": 90}  # "all" is handled separately (no date filter)
+
+    def get(self, request):
+        exercise_name = request.query_params.get("name")
+        if not exercise_name:
+            return Response({"error": "name is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        period = request.query_params.get("period", "3months")
+        if period != "all" and period not in self.PERIOD_DAYS:
+            return Response(
+                {"error": f"period must be one of {list(self.PERIOD_DAYS) + ['all']}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        performed = (
+            PerformedExercise.objects.filter(history__user=request.user, exercise_name=exercise_name)
+            .select_related("history")
+        )
+        if period != "all":
+            cutoff = timezone.localdate() - timezone.timedelta(days=self.PERIOD_DAYS[period] - 1)
+            performed = performed.filter(history__started_at__date__gte=cutoff)
+
+        sessions_by_date = {}
+        for p in performed.order_by("history__started_at"):
+            d = timezone.localtime(p.history.started_at).date()
+            session = sessions_by_date.setdefault(
+                d, {"date": d.isoformat(), "top_weight": 0, "top_weight_reps": 0, "total_sets": 0}
+            )
+            for s in p.sets_data:
+                weight = s.get("weight") or 0
+                reps = s.get("reps") or 0
+                session["total_sets"] += 1
+                # "Heaviest set" -- ties broken by more reps at that weight,
+                # since that's still meaningfully more work done.
+                if weight > session["top_weight"] or (
+                    weight == session["top_weight"] and reps > session["top_weight_reps"]
+                ):
+                    session["top_weight"] = weight
+                    session["top_weight_reps"] = reps
+
+        sessions = sorted(sessions_by_date.values(), key=lambda s: s["date"])
+
+        return Response({
+            "exercise": exercise_name,
+            "period": period,
+            "sessions": sessions,
+        })

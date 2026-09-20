@@ -1,67 +1,85 @@
-import { useState } from "react";
-import { useAuth } from "../../context/AuthContext";
-import { logWeight } from "../../api/accounts";
-import { ErrorBanner, extractErrorMessage } from "../Status";
-import WeightField from "../WeightField";
-import { useToast } from "../../context/ToastContext";
+import { formatWeight, formatWeightDelta } from "../../lib/profile";
 
-const todayStr = () => new Date().toISOString().split("T")[0];
+// Lightweight hand-rolled SVG line chart -- no charting library is
+// installed in this project, and adding one for a single chart felt
+// like overkill. Plots logged_at (x) against weight_kg (y), with an
+// optional dashed reference line for goal weight. `logs` comes in
+// most-recent-first (the API's default ordering), so it's reversed
+// here to plot left-to-right chronologically.
+// Which direction of weight change counts as "good" depends on the
+// user's actual goal -- losing weight is progress for lose_weight, but
+// it's the opposite of progress for gain_weight/gain_muscle. Mirrors
+// accounts.models.PrimaryGoal on the backend. maintain_weight and
+// build_strength aren't about weight direction at all, so neither
+// direction is colored as good/bad for those (or if the goal isn't set).
+function goalWeightDirection(primaryGoal) {
+  if (primaryGoal === "lose_weight") return "down";
+  if (primaryGoal === "gain_weight" || primaryGoal === "gain_muscle") return "up";
+  return null;
+}
 
-export default function LogWeightForm({ onLogged }) {
-  const { user, refreshUser } = useAuth();
-  const showToast = useToast();
-  const [weightKg, setWeightKg] = useState("");
-  const [loggedAt, setLoggedAt] = useState(todayStr());
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+export default function WeightChart({ logs, goalWeightKg, primaryGoal, unitSystem = "metric" }) {
+  const width = 320;
+  const height = 150;
+  const padding = { top: 14, right: 14, bottom: 20, left: 14 };
 
-  const unitSystem = user?.profile?.unit_system || "metric";
+  const chronological = [...logs].reverse();
+  const weights = chronological.map((e) => e.weight_kg);
+  const times = chronological.map((e) => new Date(e.logged_at).getTime());
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (weightKg === "") return;
-    setError("");
-    setSaving(true);
-    try {
-      await logWeight({ weightKg: Number(weightKg), loggedAt });
-      setWeightKg("");
-      setLoggedAt(todayStr());
-      // So the rest of the app (Profile, Edit Profile, anywhere else
-      // user.profile is read) shows the new current_weight_kg immediately.
-      await refreshUser();
-      showToast("Weight logged", "success");
-      onLogged?.();
-    } catch (err) {
-      setError(extractErrorMessage(err, "Couldn't log that weight."));
-    } finally {
-      setSaving(false);
-    }
-  }
+  const dataMin = Math.min(...weights);
+  const dataMax = Math.max(...weights);
+  let scaleMin = goalWeightKg != null ? Math.min(dataMin, goalWeightKg) : dataMin;
+  let scaleMax = goalWeightKg != null ? Math.max(dataMax, goalWeightKg) : dataMax;
+  const span = scaleMax - scaleMin || 1;
+  scaleMin -= span * 0.12;
+  scaleMax += span * 0.12;
+
+  const minTime = Math.min(...times);
+  const maxTime = Math.max(...times);
+  const timeSpan = maxTime - minTime || 1;
+
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+
+  const xFor = (t) => padding.left + ((t - minTime) / timeSpan) * plotWidth;
+  const yFor = (w) => padding.top + plotHeight - ((w - scaleMin) / (scaleMax - scaleMin)) * plotHeight;
+
+  const points = chronological.map((e) => `${xFor(new Date(e.logged_at).getTime())},${yFor(e.weight_kg)}`).join(" ");
+  const latest = chronological[chronological.length - 1];
+  const first = chronological[0];
+  const change = Math.round((latest.weight_kg - first.weight_kg) * 10) / 10;
+  const changeDelta = formatWeightDelta(change, unitSystem);
+  const direction = goalWeightDirection(primaryGoal);
+  const isGoodChange = change === 0 ? null : direction === "down" ? change < 0 : direction === "up" ? change > 0 : null;
+  const changeColor = isGoodChange === null ? "var(--text)" : isGoodChange ? "var(--bamboo)" : "var(--chili)";
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <div>
-          <WeightField
-            required
-            label="Weight"
-            kg={weightKg}
-            onChange={setWeightKg}
-            placeholder="e.g. 78.5"
-            defaultUnit={unitSystem === "imperial" ? "lbs" : "kg"}
-            allowToggle={false}
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {goalWeightKg != null && (
+          <line
+            x1={padding.left} x2={width - padding.right}
+            y1={yFor(goalWeightKg)} y2={yFor(goalWeightKg)}
+            stroke="var(--turmeric)" strokeWidth="1.5" strokeDasharray="4 3"
           />
-        </div>
-        <div>
-          <label>Date</label>
-          <input type="date" max={todayStr()} value={loggedAt} onChange={(e) => setLoggedAt(e.target.value)} />
-        </div>
+        )}
+        <polyline points={points} fill="none" stroke="var(--bamboo)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        {chronological.map((e) => (
+          <circle key={e.id} cx={xFor(new Date(e.logged_at).getTime())} cy={yFor(e.weight_kg)} r="3" fill="var(--bamboo)" />
+        ))}
+        <text x={padding.left} y={height - 4} fontSize="9" fill="var(--text-faint)">{first.logged_at}</text>
+        <text x={width - padding.right} y={height - 4} fontSize="9" fill="var(--text-faint)" textAnchor="end">{latest.logged_at}</text>
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12, color: "var(--text-faint)" }}>
+        <span>Latest: <strong style={{ color: "var(--text)" }}>{formatWeight(latest.weight_kg, unitSystem)}</strong></span>
+        <span>
+          Change: <strong style={{ color: changeColor }}>
+            {changeDelta.value > 0 ? "+" : ""}{changeDelta.value} {changeDelta.unit}
+          </strong>
+        </span>
+        {goalWeightKg != null && <span>Goal: <strong style={{ color: "var(--turmeric)" }}>{formatWeight(goalWeightKg, unitSystem)}</strong></span>}
       </div>
-      <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-        Logging again for a date you've already logged updates that entry instead of adding a duplicate.
-      </p>
-      <ErrorBanner message={error} />
-      <button className="btn btn-primary" disabled={saving}>{saving ? "Saving..." : "Log Weight"}</button>
-    </form>
+    </div>
   );
 }

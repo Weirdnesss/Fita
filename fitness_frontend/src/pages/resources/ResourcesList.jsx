@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
 import { listResources } from "../../api/resources";
-import { searchExercisesPaged } from "../../api/workouts";
+import { searchExercisesPaged, getExerciseCategories } from "../../api/workouts";
 import { searchFoods } from "../../api/nutrition";
 
 const TABS = [
@@ -72,6 +72,8 @@ export default function ResourcesList() {
 
 function ExercisesTab() {
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [results, setResults] = useState([]);
   const [count, setCount] = useState(0);
   const [nextOffset, setNextOffset] = useState(null);
@@ -83,18 +85,15 @@ function ExercisesTab() {
   const requestIdRef = useRef(0);
 
   useEffect(() => {
-    if (query.trim().length === 0) {
-      setResults([]);
-      setCount(0);
-      setNextOffset(null);
-      setHint("");
-      return;
-    }
+    getExerciseCategories().then(setCategories).catch(() => setCategories([]));
+  }, []);
+
+  useEffect(() => {
     const t = setTimeout(async () => {
       const requestId = ++requestIdRef.current;
       setLoading(true);
       try {
-        const r = await searchExercisesPaged(query, null, 0);
+        const r = await searchExercisesPaged(query, category, 0);
         if (requestId !== requestIdRef.current) return;
         setResults(r.results);
         setCount(r.count);
@@ -108,14 +107,14 @@ function ExercisesTab() {
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, category]);
 
   async function handleLoadMore() {
     if (nextOffset === null || loadingMore) return;
     const requestId = ++requestIdRef.current;
     setLoadingMore(true);
     try {
-      const r = await searchExercisesPaged(query, null, nextOffset);
+      const r = await searchExercisesPaged(query, category, nextOffset);
       if (requestId !== requestIdRef.current) return;
       setResults((prev) => [...prev, ...r.results]);
       setNextOffset(r.next_offset);
@@ -134,14 +133,21 @@ function ExercisesTab() {
   return (
     <>
       <input autoFocus placeholder="Search exercises (e.g. bench press, squat)" value={query} onChange={(e) => setQuery(e.target.value)} />
+      {categories.length > 0 && (
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+          <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
+          {categories.map((c) => (
+            <CategoryChip key={c} active={category === c} label={c} onClick={() => setCategory(category === c ? null : c)} />
+          ))}
+        </div>
+      )}
       {loading && <Loading />}
       <ErrorBanner message={error} />
       {hint && <p style={{ fontSize: 13, color: "var(--text-faint)" }}>{hint}</p>}
-      {!loading && !hint && query.trim().length === 0 && (
-        <p style={{ fontSize: 13, color: "var(--text-faint)" }}>Search for an exercise to see how to do it.</p>
-      )}
-      {!loading && !hint && query.trim().length > 0 && results.length === 0 && (
-        <p style={{ fontSize: 13, color: "var(--text-faint)" }}>No results for "{query}".</p>
+      {!loading && !hint && results.length === 0 && (
+        <p style={{ fontSize: 13, color: "var(--text-faint)" }}>
+          {query || category ? "No results." : "No exercises available."}
+        </p>
       )}
       {!loading && results.length > 0 && count > results.length && (
         <p style={{ fontSize: 12, color: "var(--text-faint)" }}>Showing {results.length} of {count}</p>

@@ -6,10 +6,10 @@ import WeightField from "../WeightField";
 import { formatWeight } from "../../lib/profile";
 import { useToast } from "../../context/ToastContext";
 
-export default function GoalWeightSection() {
+export default function GoalWeightSection({ startExpanded = false, onSaved }) {
   const { user, refreshUser } = useAuth();
   const showToast = useToast();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(startExpanded);
   const [goalWeightKg, setGoalWeightKg] = useState(user?.profile?.goal_weight_kg ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -25,6 +25,7 @@ export default function GoalWeightSection() {
       await refreshUser();
       showToast("Goal weight updated", "success");
       setEditing(false);
+      onSaved?.();
     } catch (err) {
       setError(extractErrorMessage(err, "Couldn't update goal weight."));
     } finally {

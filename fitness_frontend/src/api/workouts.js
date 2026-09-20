@@ -10,19 +10,16 @@ export function lbToKg(lb) {
   return Math.round(lb * KG_PER_LB * 100) / 100;
 }
 
-export async function searchExercises(query) {
-  const { data } = await client.get("/workouts/exercises/search/", { params: { q: query } });
-  // hint is only ever present alongside an empty results array (see
-  // ExerciseSearchView) -- surfaced separately so the UI can show it
-  // instead of a plain "no results" message.
-  return { results: data.results, hint: data.hint || null };
-}
-
 export async function searchExercisesPaged(query, category, offset = 0) {
   const { data } = await client.get("/workouts/exercises/search/", {
     params: { q: query, category, offset },
   });
   return data; // { count, results, next_offset, hint? }
+}
+
+export async function getExerciseCategories() {
+  const { data } = await client.get("/workouts/exercises/categories/");
+  return data; // ["Chest", "Legs", ...]
 }
 
 export async function listTemplates() {
@@ -104,4 +101,18 @@ export async function finishWorkout({ templateTitle, startedAt, exercises, note 
     note: note || "",
   });
   return data;
+}
+export async function getWorkoutTrends(period = "week") {
+  const { data } = await client.get("/workouts/trends/", { params: { period } });
+  return data; // { period, days, days_logged, total_workouts, averages, current_streak }
+}
+
+export async function getExerciseFrequency() {
+  const { data } = await client.get("/workouts/trends/exercises/");
+  return data; // [{ name, sessions }]
+}
+
+export async function getExerciseProgression(name, period = "3months") {
+  const { data } = await client.get("/workouts/trends/exercise/", { params: { name, period } });
+  return data; // { exercise, period, sessions: [{ date, top_weight, top_weight_reps, total_sets }] }
 }

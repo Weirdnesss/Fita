@@ -177,26 +177,38 @@ export default function NutritionDashboard() {
           ‹
         </button>
         <div style={{ textAlign: "center" }}>
-          <input
-            type="date"
-            value={selectedDate}
-            min={accountStartDate}
-            max={toDateStr(new Date())}
-            onChange={(e) => {
-              if (e.target.value) {
-                setSelectedDate(e.target.value);
-              }
-            }}
-            style={{
-              fontWeight: 600,
-              fontSize: 14,
-              border: "none",
-              background: "transparent",
-              color: "inherit",
-              textAlign: "center",
-              cursor: "pointer",
-            }}
-          />
+          <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+            {/* Invisible but fully functional -- catches the tap/click and opens
+                the device's native date picker. Kept in the DOM (not display:none)
+                so it stays interactive; just visually hidden under the label below. */}
+            <input
+              type="date"
+              value={selectedDate}
+              min={accountStartDate}
+              max={toDateStr(new Date())}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setSelectedDate(e.target.value);
+                }
+              }}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                opacity: 0,
+                cursor: "pointer",
+              }}
+            />
+            {/* Visible label -- a custom icon here looks consistent on every
+                device, unlike the browser's own calendar-picker indicator,
+                which varies a lot (and on some Android/Chrome versions renders
+                as a bare chevron rather than a calendar glyph). */}
+            <span style={{ fontWeight: 600, fontSize: 14, pointerEvents: "none" }}>
+              {formatDayLabel(selectedDate)}
+            </span>
+            <CalendarIcon />
+          </div>
 
           {!isToday && (
             <button
@@ -239,7 +251,7 @@ export default function NutritionDashboard() {
       </div>
 
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 ,marginTop: 8}}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, marginTop: 8 }}>
           <h3>Food Entries</h3>
           <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{formatDayLabel(selectedDate)}</span>
         </div>
@@ -249,7 +261,7 @@ export default function NutritionDashboard() {
             Trends
           </button>
           {isWithinLogWindow ? (
-            <button className="btn btn-primary" style={{ flex: 1}} onClick={() => navigate("/nutrition/search", { state: { date: selectedDate } })}>
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate("/nutrition/search", { state: { date: selectedDate } })}>
               Add Food
             </button>
           ) : (
@@ -262,13 +274,15 @@ export default function NutritionDashboard() {
           </button>
         </div>
 
-        {daily.food_entries.length === 0 && (
-          <EmptyState title="Nothing logged yet" eyebrow={`Nothing added for ${formatDayLabel(selectedDate).toLowerCase()}`} />
-        )}
+        {daily.food_entries.length === 0 ? (
+          <div className="card">
+            <EmptyState title="Nothing logged yet" eyebrow={`Nothing added for ${formatDayLabel(selectedDate).toLowerCase()}`} />
+          </div>
+        ) : (
         <div className="nutrition-meals-grid">
-        {daily.food_entries.length > 0 && MEALS.map(([key, label]) => (
-          <div key={key} className="card" style={{ marginBottom: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+        {MEALS.map(([key, label]) => (
+          <div key={key} className="card" style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
               <p style={{ fontWeight: 600 }}>{label}</p>
               <span className="pill pill-chili">
                 {Math.round(entriesByMeal[key].reduce((s, e) => s + e.calories, 0))}
@@ -278,7 +292,7 @@ export default function NutritionDashboard() {
               <p style={{ fontSize: 12, color: "var(--text-faint)", opacity: 0.6 }}>—</p>
             )}
             {entriesByMeal[key].map((e) => (
-              <div key={e.id} style={{ padding: "6px 0", borderTop: "1px solid var(--border-soft)" }}>
+              <div key={e.id} style={{ padding: "12px 0", borderTop: "1px solid var(--border-soft)" }}>
                 {editingId === e.id ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "4px 0" }}>
                     <p style={{ fontSize: 14 }}>{e.food_name}</p>
@@ -328,11 +342,11 @@ export default function NutritionDashboard() {
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <div>
                       <p style={{ fontSize: 14 }}>{e.food_name}</p>
-                      <p style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                      <p style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4 }}>
                         {e.serving_description === "100g" ? `${Math.round(e.servings * e.serving_size_g)}g` : `${e.servings}x`} · {Math.round(e.calories)} kcal
                       </p>
                     </div>
-                    <div style={{ display: "flex", gap: 12 }}>
+                    <div style={{ display: "flex", gap: 14 }}>
                       {isWithinLogWindow && (
                         <button onClick={() => startEdit(e)} style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12 }}>
                           Edit
@@ -350,6 +364,7 @@ export default function NutritionDashboard() {
           
         ))}
         </div>
+        )}
       </div>
       </div>
 
@@ -388,6 +403,17 @@ function formatDayLabel(dateStr) {
   if (dateStr === today) return "Today";
   if (dateStr === yesterday) return "Yesterday";
   return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function CalendarIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, pointerEvents: "none" }}>
+      <rect x="3" y="4" width="18" height="18" rx="2" stroke="var(--text-faint)" strokeWidth="2" />
+      <line x1="3" y1="9" x2="21" y2="9" stroke="var(--text-faint)" strokeWidth="2" />
+      <line x1="8" y1="2" x2="8" y2="6" stroke="var(--text-faint)" strokeWidth="2" strokeLinecap="round" />
+      <line x1="16" y1="2" x2="16" y2="6" stroke="var(--text-faint)" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 function CalorieRing({ pct, isOver }) {

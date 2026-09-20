@@ -18,7 +18,7 @@ export default function HistoryList() {
     const [error, setError] = useState("");
     const [page, setPage] = useState(1);
 
-    const ITEMS_PER_PAGE = 3;
+    const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
     load();

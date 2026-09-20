@@ -110,15 +110,10 @@ class Profile(models.Model):
     goal_weight_kg = models.FloatField(
         null=True, blank=True, validators=[MinValueValidator(20)]
     )
-    height_ft = models.PositiveSmallIntegerField(
+    height_cm = models.FloatField(
         null=True,
         blank=True,
-        validators=[MinValueValidator(3), MaxValueValidator(8)],
-    )
-    height_in = models.PositiveSmallIntegerField(
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0), MaxValueValidator(11)],
+        validators=[MinValueValidator(50), MaxValueValidator(250)],
     )
     primary_goal = models.CharField(
         max_length=20, choices=PrimaryGoal.choices, blank=True
@@ -135,22 +130,15 @@ class Profile(models.Model):
     )
 
     # Display-only preference: which unit each height/weight field is
-    # entered/shown in. Storage stays kg/ft/in either way (see height_cm
-    # property and current_weight_kg/goal_weight_kg above) -- this never
-    # changes what's persisted, only how the frontend presents it.
+    # entered/shown in. Storage is metric either way (height_cm,
+    # current_weight_kg, goal_weight_kg above) -- this never changes
+    # what's persisted, only how the frontend presents it.
     unit_system = models.CharField(
         max_length=10, choices=UnitSystem.choices, default=UnitSystem.METRIC
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
-    @property
-    def height_cm(self):
-        if self.height_ft is None:
-            return None
-        total_inches = (self.height_ft * 12) + (self.height_in or 0)
-        return round(total_inches * 2.54, 1)
 
     @property
     def age(self):

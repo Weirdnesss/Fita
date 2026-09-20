@@ -48,8 +48,7 @@ function initialFormFrom(profile) {
     gender: profile.gender || "",
     dateOfBirth: profile.date_of_birth || "",
     activityLevel: profile.activity_level || "",
-    heightFt: profile.height_ft ?? "",
-    heightIn: profile.height_in ?? "",
+    heightCm: profile.height_cm ?? "",
     primaryGoal: profile.primary_goal || "",
     medicalConditions: profile.medical_conditions || "",
     foodAllergies: profile.food_allergies || "",
@@ -78,8 +77,7 @@ export default function EditProfile() {
         gender: form.gender,
         date_of_birth: form.dateOfBirth,
         activity_level: form.activityLevel,
-        height_ft: form.heightFt !== "" ? Number(form.heightFt) : null,
-        height_in: form.heightIn !== "" ? Number(form.heightIn) : null,
+        height_cm: form.heightCm !== "" ? Number(form.heightCm) : null,
         primary_goal: form.primaryGoal,
         medical_conditions: form.medicalConditions,
         food_allergies: form.foodAllergies,
@@ -136,9 +134,8 @@ export default function EditProfile() {
               key={form.unitSystem}
               defaultUnit={form.unitSystem === "imperial" ? "ftin" : "cm"}
               allowToggle={false}
-              ft={form.heightFt}
-              inch={form.heightIn}
-              onChange={({ ft, inch }) => setForm((f) => ({ ...f, heightFt: ft, heightIn: inch }))}
+              cm={form.heightCm}
+              onChange={(cm) => setForm((f) => ({ ...f, heightCm: cm }))}
             />
 
             <div style={row2}>

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
-import { createTemplate, getTemplate, updateTemplate, addExerciseToTemplate, removeExerciseFromTemplate, updateTemplateExercise, swapTemplateExercise, searchExercises } from "../../api/workouts";
+import { createTemplate, getTemplate, updateTemplate, addExerciseToTemplate, removeExerciseFromTemplate, updateTemplateExercise, swapTemplateExercise, searchExercisesPaged, getExerciseCategories } from "../../api/workouts";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 
@@ -399,48 +399,83 @@ function GeneratedExerciseRow({ exercise, active, swapping, onToggle, onSwap }) 
 
 function ExerciseSearch({ onAdd, onClose }) {
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [results, setResults] = useState([]);
+  const [count, setCount] = useState(0);
+  const [nextOffset, setNextOffset] = useState(null);
   const [hint, setHint] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
 
+  // Guards against a stale response (from a query/category that's since
+  // changed, e.g. fast-switching categories) landing after a newer one
+  // and clobbering it. Mirrors nutrition's FoodSearch.
+  const requestIdRef = useRef(0);
+
   useEffect(() => {
-    if (query.trim().length < 2) {
-      setResults([]);
-      setHint(null);
-      return;
-    }
+    getExerciseCategories().then(setCategories).catch(() => setCategories([]));
+  }, []);
+
+  useEffect(() => {
     const t = setTimeout(async () => {
+      const requestId = ++requestIdRef.current;
       setLoading(true);
       setError("");
       try {
-        const { results: r, hint: h } = await searchExercises(query);
-        setResults(r);
-        setHint(h);
+        const r = await searchExercisesPaged(query, category, 0);
+        if (requestId !== requestIdRef.current) return; // superseded
+        setResults(r.results);
+        setCount(r.count);
+        setNextOffset(r.next_offset);
+        setHint(r.hint || null);
       } catch (err) {
-        // A real failure here is a connection/server problem -- the
-        // "database not synced" case is signaled separately via `hint`
-        // on a successful (200) response, never via this catch, so
-        // this message shouldn't reference it.
+        if (requestId !== requestIdRef.current) return;
         setError("Couldn't search exercises. Check your connection and try again.");
       } finally {
-        setLoading(false);
+        if (requestId === requestIdRef.current) setLoading(false);
       }
-    }, 350);
+    }, 300);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, category]);
+
+  async function handleLoadMore() {
+    setLoadingMore(true);
+    try {
+      const r = await searchExercisesPaged(query, category, nextOffset);
+      setResults((prev) => [...prev, ...r.results]);
+      setNextOffset(r.next_offset);
+    } catch (err) {
+      setError("Couldn't load more exercises.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <div className="page">
       <PageHeader title="Add Exercise" back={false} action={<button className="btn-ghost" style={{ background: "none", border: "none" }} onClick={onClose}>Close</button>} />
       <input autoFocus placeholder="Search for an exercise" value={query} onChange={(e) => setQuery(e.target.value)} />
+
+      {categories.length > 0 && (
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+          <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
+          {categories.map((c) => (
+            <CategoryChip key={c} active={category === c} label={c} onClick={() => setCategory(category === c ? null : c)} />
+          ))}
+        </div>
+      )}
+
       {loading && <Loading label="Searching" />}
       <ErrorBanner message={error} />
       {hint && !loading && (
         <p style={{ color: "var(--text-faint)", fontSize: 13 }}>{hint}</p>
       )}
-      {!loading && !hint && query.length >= 2 && results.length === 0 && !error && (
-        <p style={{ color: "var(--text-faint)", fontSize: 13 }}>No exercises found for "{query}".</p>
+      {!loading && !hint && results.length === 0 && !error && (
+        <p style={{ color: "var(--text-faint)", fontSize: 13 }}>
+          {query || category ? `No exercises found.` : "No exercises available."}
+        </p>
       )}
       {results.map((ex) => (
         <div
@@ -453,6 +488,23 @@ function ExerciseSearch({ onAdd, onClose }) {
           {ex.category && <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{ex.category}</p>}
         </div>
       ))}
+      {nextOffset !== null && !loading && (
+        <button className="btn btn-secondary" style={{ width: "100%" }} onClick={handleLoadMore} disabled={loadingMore}>
+          {loadingMore ? "Loading..." : `Load More (${count - results.length} left)`}
+        </button>
+      )}
     </div>
+  );
+}
+
+function CategoryChip({ active, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={active ? "btn btn-primary" : "btn btn-secondary"}
+      style={{ padding: "6px 12px", fontSize: 12, whiteSpace: "nowrap", flexShrink: 0, height: "auto" }}
+    >
+      {label}
+    </button>
   );
 }

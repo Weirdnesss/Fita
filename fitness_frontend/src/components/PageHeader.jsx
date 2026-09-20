@@ -26,7 +26,16 @@ export default function PageHeader({ title, subtitle, back, backTo, onBack, acti
 }
 
 const styles = {
-  header: { display: "flex", flexDirection: "column", gap: 4 },
+  header: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    position: "sticky",
+    top: 0,
+    zIndex: 10,
+    background: "var(--bg)",
+    paddingBottom: 10,
+  },
   top: { display: "flex", alignItems: "center", gap: 10 },
   backBtn: {
     background: "none",

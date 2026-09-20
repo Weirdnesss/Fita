@@ -8,8 +8,7 @@ export const REQUIRED_PROFILE_FIELDS = [
   "date_of_birth",
   "activity_level",
   "goal_weight_kg",
-  "height_ft",
-  "height_in",
+  "height_cm",
   "primary_goal",
   "workout_frequency",
   "workout_location",
@@ -22,11 +21,11 @@ export function isProfileIncomplete(profile) {
   );
 }
 
-// Height is stored server-side as height_ft/height_in (see
-// accounts/models.py) -- height_cm is only a derived read-only field
-// for display/BMI. Offering a cm input is a frontend-only convenience:
-// convert to ft/in right before submitting, so the API contract never
-// has to change.
+// Height is stored server-side as a single height_cm field (see
+// accounts/models.py) -- metric-native, matching current_weight_kg/
+// goal_weight_kg. Offering an ft/in input is a frontend-only
+// convenience: convert to cm right before submitting, same pattern as
+// kg/lbs below.
 export function cmToFtIn(cm) {
   const totalInches = cm / 2.54;
   const ft = Math.floor(totalInches / 12);
@@ -39,7 +38,7 @@ export function cmToFtIn(cm) {
 
 export function ftInToCm(ft, inch) {
   const totalInches = Number(ft || 0) * 12 + Number(inch || 0);
-  return Math.round(totalInches * 2.54);
+  return Math.round(totalInches * 2.54 * 10) / 10;
 }
 
 // Same story as height: current_weight_kg/goal_weight_kg/weight_kg are
@@ -68,10 +67,13 @@ export function formatWeight(kg, unitSystem = "metric") {
   return `${Number(kg)} kg`;
 }
 
-export function formatHeight(ft, inch, unitSystem = "metric") {
-  if (ft === null || ft === undefined || ft === "") return null;
-  if (unitSystem === "imperial") return `${ft}' ${inch || 0}"`;
-  return `${ftInToCm(ft, inch)} cm`;
+export function formatHeight(cm, unitSystem = "metric") {
+  if (cm === null || cm === undefined || cm === "") return null;
+  if (unitSystem === "imperial") {
+    const { ft, inch } = cmToFtIn(Number(cm));
+    return `${ft}' ${inch}"`;
+  }
+  return `${Math.round(Number(cm))} cm`;
 }
 
 // For a +/- change value (e.g. weight trend delta) rather than an

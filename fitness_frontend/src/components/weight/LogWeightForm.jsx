@@ -1,80 +1,67 @@
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { updateProfile } from "../../api/accounts";
+import { logWeight } from "../../api/accounts";
 import { ErrorBanner, extractErrorMessage } from "../Status";
 import WeightField from "../WeightField";
-import { formatWeight } from "../../lib/profile";
 import { useToast } from "../../context/ToastContext";
 
-export default function GoalWeightSection() {
+const todayStr = () => new Date().toISOString().split("T")[0];
+
+export default function LogWeightForm({ onLogged }) {
   const { user, refreshUser } = useAuth();
   const showToast = useToast();
-  const [editing, setEditing] = useState(false);
-  const [goalWeightKg, setGoalWeightKg] = useState(user?.profile?.goal_weight_kg ?? "");
+  const [weightKg, setWeightKg] = useState("");
+  const [loggedAt, setLoggedAt] = useState(todayStr());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const currentGoal = user?.profile?.goal_weight_kg ?? null;
   const unitSystem = user?.profile?.unit_system || "metric";
 
-  async function handleSave() {
-    setSaving(true);
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (weightKg === "") return;
     setError("");
+    setSaving(true);
     try {
-      await updateProfile({ goal_weight_kg: goalWeightKg !== "" ? Number(goalWeightKg) : null });
+      await logWeight({ weightKg: Number(weightKg), loggedAt });
+      setWeightKg("");
+      setLoggedAt(todayStr());
+      // So the rest of the app (Profile, Edit Profile, anywhere else
+      // user.profile is read) shows the new current_weight_kg immediately.
       await refreshUser();
-      showToast("Goal weight updated", "success");
-      setEditing(false);
+      showToast("Weight logged", "success");
+      onLogged?.();
     } catch (err) {
-      setError(extractErrorMessage(err, "Couldn't update goal weight."));
+      setError(extractErrorMessage(err, "Couldn't log that weight."));
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <div>
-          <p className="eyebrow">Goal weight</p>
-          {!editing && (
-            <p style={{ fontSize: 20, fontWeight: 700 }}>
-              {currentGoal != null ? formatWeight(currentGoal, unitSystem) : "Not set"}
-            </p>
-          )}
-        </div>
-        {!editing && (
-          <button
-            className="btn-ghost"
-            style={{ background: "none", border: "1px solid var(--border)", fontSize: 12, padding: "6px 12px", borderRadius: "var(--radius-sm)" }}
-            onClick={() => { setGoalWeightKg(currentGoal ?? ""); setEditing(true); }}
-          >
-            {currentGoal != null ? "Change" : "Set goal"}
-          </button>
-        )}
-      </div>
-      {editing && (
-        <div style={{ marginTop: 10 }}>
           <WeightField
-            autoFocus
-            label="Goal weight"
-            kg={goalWeightKg}
-            onChange={setGoalWeightKg}
-            placeholder="e.g. 75"
+            required
+            label="Weight"
+            kg={weightKg}
+            onChange={setWeightKg}
+            placeholder="e.g. 78.5"
             defaultUnit={unitSystem === "imperial" ? "lbs" : "kg"}
             allowToggle={false}
           />
-          <ErrorBanner message={error} />
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={handleSave} disabled={saving}>
-              {saving ? "Saving..." : "Save"}
-            </button>
-            <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={() => setEditing(false)} disabled={saving}>
-              Cancel
-            </button>
-          </div>
         </div>
-      )}
-    </div>
+        <div>
+          <label>Date</label>
+          <input type="date" max={todayStr()} value={loggedAt} onChange={(e) => setLoggedAt(e.target.value)} />
+        </div>
+      </div>
+      <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+        Logging again for a date you've already logged updates that entry instead of adding a duplicate.
+      </p>
+      <ErrorBanner message={error} />
+      <button className="btn btn-primary" disabled={saving}>{saving ? "Saving..." : "Log Weight"}</button>
+    </form>
   );
 }

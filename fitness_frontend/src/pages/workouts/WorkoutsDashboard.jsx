@@ -77,29 +77,33 @@ export default function WorkoutsDashboard() {
       <PageHeader title="Workouts" subtitle="Organize your routines" />
       <ErrorBanner message={error} />
 
-      <div className="card workout-actions-row" style={{ marginBottom: 20 }}>
+            <div className="card workout-actions-row" style={{ marginBottom: 20 }}>
         <div>
-          <p style={{ fontWeight: 600 }}>Generate a workout</p>
+          <p style={{ fontWeight: 600 }}>New Routine</p>
           <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-            Built from your goal, frequency, and location · once a week
+            Generated plans use your goal, frequency, and location · once a week
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
           <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => navigate("/workouts/new")}>
-            + Create
+            Build My Own
           </button>
           <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleGenerate} disabled={generating}>
-            {generating ? "Generating..." : "Generate"}
+            {generating ? "Generating..." : "Generate for Me"}
           </button>
         </div>
       </div>
 
+
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <h3>My Routines</h3>
+          <button className="btn btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => navigate("/workouts/trends")}>
+            Trends
+          </button>
         </div>
 
-        {templates?.length > 0 && (
+        {ownCount > 0 && generatedCount > 0 && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
             <FilterChip active={filter === "all"} label={`All (${templates.length})`} onClick={() => setFilter("all")} />
             <FilterChip active={filter === "own"} label={`Own (${ownCount})`} onClick={() => setFilter("own")} />
@@ -117,42 +121,26 @@ export default function WorkoutsDashboard() {
         <div className="workout-template-grid">
           {visibleTemplates.map((r) => (
             <div key={r.id} className="card" style={{ marginBottom: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
-                <p style={{ fontWeight: 600 }}>{r.title}</p>
-                <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{r.exercises.length} exercises</p>
-              </div>
-              {r.is_generated && <span className="pill pill-bamboo">Generated</span>}
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              {!r.is_generated && (
-                <button
-                  className="btn btn-secondary"
-                  style={{ padding: "6px 12px", fontSize: 12 }}
-                  onClick={() => navigate(`/workouts/templates/${r.id}`)}
-                >
-                  Edit
-                </button>
-              )}
-              {r.is_generated && (
-                <button
-                  className="btn btn-secondary"
-                  style={{ padding: "6px 12px", fontSize: 12 }}
-                  onClick={() => navigate(`/workouts/templates/${r.id}`)}
-                >
-                  View / Swap
-                </button>
-              )}
+            <p style={{ fontWeight: 600 }}>{r.title}</p>
+            <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 12 }}>{r.exercises.length} exercises</p>
+            <button
+              className="btn btn-primary"
+              style={{ width: "100%", padding: "10px 12px", fontSize: 13 }}
+              onClick={() => navigate(`/workouts/templates/${r.id}/start`)}
+            >
+              Start Workout
+            </button>
+            <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 10 }}>
               <button
-                className="btn btn-primary"
-                style={{ padding: "6px 12px", fontSize: 12 }}
-                onClick={() => navigate(`/workouts/templates/${r.id}/start`)}
+                className="btn-ghost"
+                style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12, padding: 0 }}
+                onClick={() => navigate(`/workouts/templates/${r.id}`)}
               >
-                Start
+                {r.is_generated ? "View / Swap" : "Edit"}
               </button>
               <button
                 className="btn-ghost"
-                style={{ background: "none", border: "1px solid var(--border)", color: "var(--chili)", fontSize: 12, padding: "6px 12px", borderRadius: "var(--radius)" }}
+                style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12, padding: 0 }}
                 onClick={() => setPendingDelete({ id: r.id, title: r.title })}
               >
                 Delete
@@ -170,33 +158,24 @@ export default function WorkoutsDashboard() {
         </div>
         {history === null && <Loading />}
         {history?.length === 0 && <EmptyState title="No workouts logged yet" />}
-        {history?.slice(0, 4).map((h) => (
-          <div key={h.id} className="card" style={{ marginBottom: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
-                <p style={{ fontWeight: 600 }}>{h.template_title}</p>
-                <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                  {new Date(h.completed_at).toLocaleDateString()}
-                </p>
-              </div>
-              <span className="pill pill-bamboo">{h.duration_minutes} min</span>
+        {history?.slice(0, 3).map((h) => (
+          <div key={h.id} className="card" style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <p style={{ fontWeight: 600, fontSize: 14 }}>{h.template_title}</p>
+              <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                {new Date(h.completed_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })} · {h.duration_minutes} min
+              </p>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 10 }}>
-              <div style={{ display: "flex", gap: 16 }}>
-                <MiniStat label="Exercises" value={h.total_exercises} />
-                <MiniStat label="Sets" value={h.total_sets} />
-              </div>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: "6px 12px", fontSize: 12 }}
-                onClick={() => navigate(`/workouts/history/${h.id}`)}
-              >
-                View
-              </button>
-            </div>
+            <button
+              className="btn btn-secondary"
+              style={{ padding: "6px 12px", fontSize: 12, flexShrink: 0 }}
+              onClick={() => navigate(`/workouts/history/${h.id}`)}
+            >
+              View
+            </button>
           </div>
         ))}
-        {history && history.length > 4 && (
+        {history && history.length > 3 && (
           <button
             className="btn btn-secondary"
             style={{ width: "100%", marginTop: 4 }}
@@ -214,15 +193,6 @@ export default function WorkoutsDashboard() {
         onConfirm={confirmDeleteTemplate}
         onCancel={() => setPendingDelete(null)}
       />
-    </div>
-  );
-}
-
-function MiniStat({ label, value }) {
-  return (
-    <div>
-      <div className="stat" style={{ fontSize: 15 }}>{value}</div>
-      <div className="eyebrow">{label}</div>
     </div>
   );
 }

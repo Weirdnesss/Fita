@@ -40,17 +40,17 @@ class ProfileSerializer(serializers.ModelSerializer):
     """Handles Sign Up - Steps 2 & 3, and the Edit Profile screen."""
 
     bmi = serializers.ReadOnlyField()
-    height_cm = serializers.ReadOnlyField()
     age = serializers.ReadOnlyField()
 
     # current_weight_kg is now fully derived -- Signup Step 2 logs the
     # initial baseline through POST /accounts/weight-logs/ (see
     # Signup.jsx) instead of writing this field directly, so nothing
     # writes it anymore except _sync_current_weight() in views.py.
-    # goal_weight_kg keeps its own upper bound below since it's still
-    # a plain editable field.
+    # goal_weight_kg and height_cm keep their own bounds below since
+    # they're still plain editable fields.
     current_weight_kg = serializers.ReadOnlyField()
     goal_weight_kg = serializers.FloatField(required=False, allow_null=True, min_value=20, max_value=300)
+    height_cm = serializers.FloatField(required=False, allow_null=True, min_value=50, max_value=250)
 
     def validate_date_of_birth(self, value):
         if value is None:
@@ -74,8 +74,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "activity_level",
             "current_weight_kg",
             "goal_weight_kg",
-            "height_ft",
-            "height_in",
+            "height_cm",
             "primary_goal",
             "medical_conditions",
             "food_allergies",
@@ -83,25 +82,17 @@ class ProfileSerializer(serializers.ModelSerializer):
             "workout_location",
             "unit_system",
             "bmi",
-            "height_cm",
         ]
 
 
 class AccountSerializer(serializers.ModelSerializer):
     """Full profile view: combines Account + nested Profile."""
+
     profile = ProfileSerializer(read_only=True)
 
     class Meta:
         model = Account
-        fields = [
-            "id",
-            "email",
-            "first_name",
-            "last_name",
-            "date_joined",
-            "profile",
-        ]
-        read_only_fields = ["date_joined"]
+        fields = ["id", "email", "first_name", "last_name", "profile"]
 
 
 class WeightLogSerializer(serializers.ModelSerializer):

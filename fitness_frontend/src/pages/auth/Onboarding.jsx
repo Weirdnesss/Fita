@@ -58,8 +58,7 @@ function initialFormFrom(profile) {
     // already have a logged weight; submitting still logs a fresh entry.
     currentWeightKg: profile.current_weight_kg ?? "",
     goalWeightKg: profile.goal_weight_kg ?? "",
-    heightFt: profile.height_ft ?? "",
-    heightIn: profile.height_in ?? "",
+    heightCm: profile.height_cm ?? "",
     primaryGoal: profile.primary_goal || "",
     medicalConditions: profile.medical_conditions || "",
     foodAllergies: profile.food_allergies || "",
@@ -90,8 +89,7 @@ export default function Onboarding() {
         date_of_birth: form.dateOfBirth,
         activity_level: form.activityLevel,
         goal_weight_kg: form.goalWeightKg ? Number(form.goalWeightKg) : null,
-        height_ft: form.heightFt ? Number(form.heightFt) : null,
-        height_in: form.heightIn ? Number(form.heightIn) : null,
+        height_cm: form.heightCm ? Number(form.heightCm) : null,
         primary_goal: form.primaryGoal,
       });
       // current_weight_kg is derived, not writable directly (see
@@ -214,9 +212,8 @@ export default function Onboarding() {
             <HeightField
               required
               defaultUnit={user?.profile?.unit_system === "imperial" ? "ftin" : "cm"}
-              ft={form.heightFt}
-              inch={form.heightIn}
-              onChange={({ ft, inch }) => setForm((f) => ({ ...f, heightFt: ft, heightIn: inch }))}
+              cm={form.heightCm}
+              onChange={(cm) => setForm((f) => ({ ...f, heightCm: cm }))}
             />
             <ErrorBanner message={error} />
             <button className="btn btn-primary btn-block" disabled={submitting}>{submitting ? "Saving..." : "Continue"}</button>

@@ -142,6 +142,11 @@ textarea::placeholder {
   color: var(--text-faint);
 }
 
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
+}
+
 label {
   display: block;
   font-size: 12px;
@@ -692,8 +697,8 @@ label {
 
 @media (min-width: 900px) {
   .nutrition-date-nav {
-    /* width: 100%; */
-    max-width: 360px;
+    width: 100%;
+    max-width: 700px;
     margin: 0 auto;
   }
 }
@@ -764,6 +769,14 @@ label {
 @media (min-width: 900px) {
   .nutrition-trends {
     /* width: 100%; */
+    max-width: 900px;
+    margin: 0 auto;
+  }
+}
+
+@media (min-width: 900px) {
+  .workout-trends {
+    width: 100%;
     max-width: 900px;
     margin: 0 auto;
   }
