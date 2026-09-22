@@ -173,6 +173,21 @@ class WorkoutGenerationState(models.Model):
     )
     last_generated_at = models.DateTimeField(null=True, blank=True)
 
+    # Snapshot of the three Profile fields the generator actually reads
+    # (see workouts/services/workout_generator.py), taken at the moment
+    # of the last generation. If any of these no longer match the
+    # user's current profile on the next Generate attempt, the weekly
+    # cooldown is bypassed -- the previously-generated routine was
+    # built for parameters that no longer apply, so making them wait
+    # out the cooldown would mean keeping a stale/wrong routine for no
+    # reason. An edit to an unrelated field (name, weight, activity
+    # level -- which isn't used by the generator at all) does NOT
+    # bypass the cooldown, since that would make the cooldown trivially
+    # exploitable by toggling something irrelevant back and forth.
+    generated_for_frequency = models.CharField(max_length=20, blank=True)
+    generated_for_location = models.CharField(max_length=20, blank=True)
+    generated_for_goal = models.CharField(max_length=20, blank=True)
+
     def __str__(self):
         return f"WorkoutGenerationState<{self.user.email}>"
 

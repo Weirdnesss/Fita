@@ -6,6 +6,13 @@ import { listTemplates, listHistory, deleteTemplate, generateWorkout } from "../
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 
+// Generated routines cap at 6 forever (one per day-type -- see
+// workouts/models.py's one_generated_template_per_day_type_per_user
+// constraint), so 6 comfortably shows a full generated split without
+// "Load More". Self-made routines have no such cap, so this is what
+// keeps that list from growing unbounded on screen.
+const TEMPLATES_PAGE_SIZE = 6;
+
 export default function WorkoutsDashboard() {
   const navigate = useNavigate();
   const showToast = useToast();
@@ -15,6 +22,13 @@ export default function WorkoutsDashboard() {
   const [generating, setGenerating] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null); // { id, title } | null
   const [filter, setFilter] = useState("all"); // "all" | "own" | "generated"
+  const [medicalNote, setMedicalNote] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(TEMPLATES_PAGE_SIZE);
+
+  function handleFilterChange(next) {
+    setFilter(next);
+    setVisibleCount(TEMPLATES_PAGE_SIZE); // switching filters starts back at the top of that list
+  }
 
   useEffect(() => {
     load();
@@ -34,11 +48,16 @@ export default function WorkoutsDashboard() {
     setGenerating(true);
     setError("");
     try {
-      await generateWorkout();
+      const result = await generateWorkout();
       // Re-fetch rather than patch local state in place: one Generate
       // call can create/replace multiple day-type routines at once
       // (the whole split), so a full refresh is simplest to keep correct.
       await load();
+      // A toast alone isn't right for this -- it auto-dismisses in a
+      // couple seconds, and a medical/injury disclaimer needs to
+      // actually be read, not just glanced at. Shown as a persistent
+      // banner instead (below), which the user has to dismiss themselves.
+      setMedicalNote(result.medical_note || null);
       showToast("Workout routines generated", "success");
     } catch (err) {
       const nextEligible = err?.response?.data?.next_eligible_at;
@@ -77,7 +96,19 @@ export default function WorkoutsDashboard() {
       <PageHeader title="Workouts" subtitle="Organize your routines" />
       <ErrorBanner message={error} />
 
-            <div className="card workout-actions-row" style={{ marginBottom: 20 }}>
+      {medicalNote && (
+        <div className="card" style={{ borderColor: "var(--turmeric)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <p style={{ fontSize: 13 }}>{medicalNote}</p>
+          <button
+            onClick={() => setMedicalNote(null)}
+            style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12, flexShrink: 0 }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <div className="card workout-actions-row" style={{ marginBottom: 20 }}>
         <div>
           <p style={{ fontWeight: 600 }}>New Routine</p>
           <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
@@ -94,7 +125,6 @@ export default function WorkoutsDashboard() {
         </div>
       </div>
 
-
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <h3>My Routines</h3>
@@ -105,9 +135,9 @@ export default function WorkoutsDashboard() {
 
         {ownCount > 0 && generatedCount > 0 && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-            <FilterChip active={filter === "all"} label={`All (${templates.length})`} onClick={() => setFilter("all")} />
-            <FilterChip active={filter === "own"} label={`Own (${ownCount})`} onClick={() => setFilter("own")} />
-            <FilterChip active={filter === "generated"} label={`Generated (${generatedCount})`} onClick={() => setFilter("generated")} />
+            <FilterChip active={filter === "all"} label={`All (${templates.length})`} onClick={() => handleFilterChange("all")} />
+            <FilterChip active={filter === "own"} label={`Own (${ownCount})`} onClick={() => handleFilterChange("own")} />
+            <FilterChip active={filter === "generated"} label={`Generated (${generatedCount})`} onClick={() => handleFilterChange("generated")} />
           </div>
         )}
 
@@ -119,7 +149,7 @@ export default function WorkoutsDashboard() {
 
       {visibleTemplates?.length > 0 && (
         <div className="workout-template-grid">
-          {visibleTemplates.map((r) => (
+          {visibleTemplates.slice(0, visibleCount).map((r) => (
             <div key={r.id} className="card" style={{ marginBottom: 10 }}>
             <p style={{ fontWeight: 600 }}>{r.title}</p>
             <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 12 }}>{r.exercises.length} exercises</p>
@@ -149,6 +179,16 @@ export default function WorkoutsDashboard() {
           </div>
         ))}
         </div>
+      )}
+
+      {visibleTemplates?.length > visibleCount && (
+        <button
+          className="btn btn-secondary"
+          style={{ width: "100%", marginTop: 4 }}
+          onClick={() => setVisibleCount((c) => c + TEMPLATES_PAGE_SIZE)}
+        >
+          Show More ({visibleTemplates.length - visibleCount} left)
+        </button>
       )}
       </div>
     

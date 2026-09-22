@@ -16,6 +16,7 @@ from .services.workout_generator import (
     WorkoutGenerationRateLimitedError,
     WorkoutGeneratorError,
     generate_workout,
+    get_medical_condition_note,
     swap_exercise,
 )
 
@@ -363,10 +364,11 @@ class GenerateWorkoutView(APIView):
     (goal, workout frequency, workout location) and (re)generates
     every day-type template in their split at once -- e.g. both Upper
     and Lower together -- see workouts/services/workout_generator.py
-    for the actual rules, including the once-per-7-days cooldown and
-    the stagnation check that decides whether a day-type's exercises
-    actually get reshuffled.
-    Response: {"templates": [...]}
+    for the actual rules, including the once-per-7-days cooldown (bypassed
+    if frequency/location/goal changed since the last generation), the
+    stagnation check that decides whether a day-type's exercises actually
+    get reshuffled, and the coarse medical-condition exercise exclusions.
+    Response: {"templates": [...], "medical_note": "..." | null}
     A 429 response (rate limited) includes "next_eligible_at".
     """
 
@@ -380,7 +382,10 @@ class GenerateWorkoutView(APIView):
             )
         except WorkoutGeneratorError as e:
             return Response({"error": str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-        return Response({"templates": WorkoutTemplateSerializer(templates, many=True).data})
+        return Response({
+            "templates": WorkoutTemplateSerializer(templates, many=True).data,
+            "medical_note": get_medical_condition_note(getattr(request.user, "profile", None)),
+        })
 
 
 class TemplateExerciseSwapView(APIView):

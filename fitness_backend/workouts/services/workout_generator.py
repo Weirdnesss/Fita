@@ -182,8 +182,78 @@ COMMON_EXERCISE_KEYWORDS = {
     "Calves": ["calf raise"],
 }
 
+# Deliberately coarse, whole-category safety net for Profile.medical_conditions
+# (free text, matched by keyword the same way BEGINNER_EXCLUDE_KEYWORDS is
+# above). This is NOT a substitute for guidance from a doctor or physical
+# therapist -- it only recognizes a short list of common, clearly-named
+# conditions and reacts at the category level (e.g. drops "Legs" entirely
+# for "knee" rather than trying to judge which specific leg exercises are
+# knee-safe, which needs real kinesiology judgment this file doesn't have).
+# A condition that isn't one of these keywords, or where only some
+# exercises in a category are actually a problem, isn't something this can
+# safely automate -- see get_medical_condition_note() below, which is
+# always shown whenever medical_conditions is non-empty, matched or not.
+CONDITION_EXCLUDED_CATEGORIES = {
+    "knee": ["Legs"],
+    "hip": ["Legs"],
+    "ankle": ["Legs", "Calves"],
+    "shoulder": ["Shoulders"],
+    "back": ["Back"],
+    "lower back": ["Back", "Legs"],
+    "spine": ["Back", "Legs"],
+    "neck": ["Shoulders"],
+}
 
-def _pick_exercises_for_category(category, location, count, exclude_ids=None):
+# Same idea, but for specific exercise-name keywords that matter across
+# more than one category (e.g. a deadlift is sometimes pulled from the
+# Legs pool too, not just Back).
+CONDITION_EXCLUDED_EXERCISE_KEYWORDS = {
+    "back": ["deadlift"],
+    "lower back": ["deadlift"],
+    "spine": ["deadlift"],
+    "wrist": ["push-up", "push up", "plank"],
+}
+
+
+def _condition_keywords(medical_conditions):
+    """Recognized CONDITION_EXCLUDED_* keys found in the user's free-text medical_conditions."""
+    if not medical_conditions:
+        return []
+    text = medical_conditions.lower()
+    all_keys = set(CONDITION_EXCLUDED_CATEGORIES) | set(CONDITION_EXCLUDED_EXERCISE_KEYWORDS)
+    return [kw for kw in all_keys if kw in text]
+
+
+def get_medical_condition_note(profile):
+    """
+    Shown whenever the user has anything in Profile.medical_conditions,
+    regardless of whether a recognized keyword was matched -- free text
+    can say anything, and this generator can only act on a short known
+    list (see CONDITION_EXCLUDED_CATEGORIES), so the disclaimer has to
+    cover the gap between "what we filtered" and "what's actually safe
+    for this person". Returns None when there's nothing on file.
+    """
+    if not profile or not profile.medical_conditions:
+        return None
+    matched = _condition_keywords(profile.medical_conditions)
+    if matched:
+        avoided = sorted({
+            cat for kw in matched for cat in CONDITION_EXCLUDED_CATEGORIES.get(kw, [])
+        })
+        detail = f" We've tried to avoid {', '.join(avoided)} exercises based on this." if avoided else ""
+        return (
+            f"Your profile mentions a medical condition or injury.{detail} "
+            "This is a basic precaution, not medical advice -- please review this "
+            "routine with a doctor or physical therapist before starting."
+        )
+    return (
+        "Your profile mentions a medical condition or injury we don't have "
+        "specific exercise guidance for. Please review this routine with a "
+        "doctor or physical therapist before starting."
+    )
+
+
+def _pick_exercises_for_category(category, location, count, exclude_ids=None, extra_exclude_keywords=None):
     qs = WgerExercise.objects.filter(category_name__iexact=category)
 
     if location == WorkoutLocation.HOME:
@@ -217,6 +287,16 @@ def _pick_exercises_for_category(category, location, count, exclude_ids=None):
     # everything available happens to match -- a filtered-but-risky
     # exercise beats no exercise for that muscle group at all.
     candidates = filtered if filtered else candidates
+
+    if extra_exclude_keywords:
+        # Same "don't wipe out the whole category" fallback as above --
+        # applied here too so a medical-condition keyword exclusion
+        # can't leave a category completely empty either.
+        without_condition = [
+            c for c in candidates
+            if not any(kw in c.name.lower() for kw in extra_exclude_keywords)
+        ]
+        candidates = without_condition if without_condition else candidates
 
     if not candidates:
         return []
@@ -279,11 +359,33 @@ def _is_stagnant(user, template_title):
     return newest_volume <= oldest_volume
 
 
-def _populate_template(template, categories, location, count_per_category, target_sets, exclude_ids=None):
+def _populate_template(
+    template, categories, location, count_per_category, target_sets,
+    exclude_ids=None, condition_keywords=None,
+):
+    excluded_categories = set()
+    excluded_exercise_keywords = set()
+    for kw in (condition_keywords or []):
+        excluded_categories.update(CONDITION_EXCLUDED_CATEGORIES.get(kw, []))
+        excluded_exercise_keywords.update(CONDITION_EXCLUDED_EXERCISE_KEYWORDS.get(kw, []))
+
+    # Same "don't leave a day-type with nothing at all" reasoning used
+    # throughout this file -- an empty workout is a worse failure mode
+    # than a condition-based exclusion not fully applying, so if
+    # excluding categories would wipe out this entire day-type, the
+    # exclusion is skipped for this generation. get_medical_condition_note()
+    # is always shown regardless, so the user isn't left thinking this
+    # was safely filtered when it wasn't.
+    remaining = [c for c in categories if c not in excluded_categories]
+    categories_to_use = remaining if remaining else categories
+
     template.exercises.all().delete()
     order = 0
-    for category in categories:
-        picks = _pick_exercises_for_category(category, location, count_per_category, exclude_ids)
+    for category in categories_to_use:
+        picks = _pick_exercises_for_category(
+            category, location, count_per_category, exclude_ids,
+            extra_exclude_keywords=excluded_exercise_keywords,
+        )
         for wger_ex in picks:
             TemplateExercise.objects.create(
                 template=template,
@@ -303,29 +405,46 @@ def _populate_template(template, categories, location, count_per_category, targe
 def generate_workout(user):
     """
     (Re)generates every day-type template in the user's split, once
-    every 7 days account-wide. For a day-type that already has a
-    generated template with enough logged history, exercises are only
-    reshuffled if that day-type is stagnant (see _is_stagnant) --
-    otherwise the existing exercises are left untouched so progressive
-    overload isn't interrupted for no reason. Returns the list of
-    templates for the whole split.
+    every 7 days account-wide -- UNLESS workout_frequency, workout_location,
+    or primary_goal (the only three Profile fields this function reads)
+    have changed since the last generation, in which case the cooldown
+    is bypassed: the existing routine was built for parameters that no
+    longer apply, so it's already stale regardless of the 7-day window.
+    See WorkoutGenerationState.generated_for_* for why only these three
+    fields count.
+
+    For a day-type that already has a generated template with enough
+    logged history, exercises are only reshuffled if that day-type is
+    stagnant (see _is_stagnant) -- otherwise the existing exercises are
+    left untouched so progressive overload isn't interrupted for no
+    reason. Returns the list of templates for the whole split.
     """
     if not WgerExercise.objects.exists():
         raise WorkoutGeneratorError(
             "Exercise database is empty. Run 'python manage.py sync_wger_exercises' first."
         )
 
-    state, _ = WorkoutGenerationState.objects.get_or_create(user=user)
-    now = timezone.now()
-    if state.last_generated_at is not None:
-        next_eligible_at = state.last_generated_at + GENERATION_COOLDOWN
-        if now < next_eligible_at:
-            raise WorkoutGenerationRateLimitedError(next_eligible_at)
-
     profile = getattr(user, "profile", None)
     frequency = (profile.workout_frequency if profile else "") or WorkoutFrequency.THREE_TO_FOUR
     location = (profile.workout_location if profile else "") or WorkoutLocation.GYM
     goal = (profile.primary_goal if profile else "") or PrimaryGoal.MAINTAIN_WEIGHT
+
+    state, _ = WorkoutGenerationState.objects.get_or_create(user=user)
+    now = timezone.now()
+    relevant_profile_changed = (
+        state.last_generated_at is not None
+        and (
+            state.generated_for_frequency != frequency
+            or state.generated_for_location != location
+            or state.generated_for_goal != goal
+        )
+    )
+    if state.last_generated_at is not None and not relevant_profile_changed:
+        next_eligible_at = state.last_generated_at + GENERATION_COOLDOWN
+        if now < next_eligible_at:
+            raise WorkoutGenerationRateLimitedError(next_eligible_at)
+
+    condition_keywords = _condition_keywords(profile.medical_conditions if profile else "")
 
     split = SPLITS.get(frequency, SPLITS[WorkoutFrequency.THREE_TO_FOUR])
     count_per_category, target_sets = GOAL_PARAMS.get(goal, DEFAULT_GOAL_PARAMS)
@@ -354,14 +473,21 @@ def generate_workout(user):
                 is_generated=True,
                 day_type=day_type,
             )
-            _populate_template(template, categories, location, count_per_category, target_sets)
-        elif _is_stagnant(user, title):
+            _populate_template(
+                template, categories, location, count_per_category, target_sets,
+                condition_keywords=condition_keywords,
+            )
+        elif _is_stagnant(user, title) or relevant_profile_changed:
+            # A relevant profile change also forces a reshuffle even if
+            # the day-type wasn't otherwise stagnant -- e.g. a changed
+            # goal should actually change count_per_category/target_sets
+            # in the new template, not just unlock the button.
             exclude_ids = set(
                 template.exercises.values_list("wger_exercise_id", flat=True)
             )
             _populate_template(
                 template, categories, location, count_per_category, target_sets,
-                exclude_ids=exclude_ids,
+                exclude_ids=exclude_ids, condition_keywords=condition_keywords,
             )
             template.save(update_fields=["updated_at"])
         else:
@@ -376,7 +502,12 @@ def generate_workout(user):
         templates.append(template)
 
     state.last_generated_at = now
-    state.save(update_fields=["last_generated_at"])
+    state.generated_for_frequency = frequency
+    state.generated_for_location = location
+    state.generated_for_goal = goal
+    state.save(update_fields=[
+        "last_generated_at", "generated_for_frequency", "generated_for_location", "generated_for_goal",
+    ])
 
     if all(t.exercises.count() == 0 for t in templates):
         # Every category across the whole split came up empty --

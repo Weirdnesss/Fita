@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
@@ -92,7 +95,7 @@ class AccountSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Account
-        fields = ["id", "email", "first_name", "last_name", "profile"]
+        fields = ["id", "email", "first_name", "last_name", "date_joined", "profile"]
 
 
 class WeightLogSerializer(serializers.ModelSerializer):
@@ -104,3 +107,31 @@ class WeightLogSerializer(serializers.ModelSerializer):
         model = WeightLog
         fields = ["id", "weight_kg", "logged_at", "created_at"]
         read_only_fields = ["id", "created_at"]
+
+    def validate_logged_at(self, value):
+        # Backdating is deliberately narrow: it's a claim about the past
+        # ("I weighed X on this date"), and the further back that reaches
+        # the more likely it's a guess rather than an actual memory --
+        # which matters since the trend chart and reports are only as
+        # good as the data feeding them. Floor is whichever is later:
+        # 7 days ago, or account creation (never earlier than signup --
+        # there's nothing meaningful to backdate to before the account
+        # existed). This only applies to *creating*/*editing* an entry
+        # -- deleting a mistaken old entry stays unrestricted regardless
+        # of age, since trapping people with uncorrectable old mistakes
+        # is a worse outcome than the thing this window prevents.
+        today = timezone.localdate()
+        if value > today:
+            raise serializers.ValidationError("Can't log a weight for a future date.")
+
+        request = self.context.get("request")
+        earliest = today - timedelta(days=7)
+        if request and request.user and request.user.is_authenticated:
+            signup_date = request.user.date_joined.date()
+            if signup_date > earliest:
+                earliest = signup_date
+        if value < earliest:
+            raise serializers.ValidationError(
+                f"Weight can only be logged from {earliest.isoformat()} onward."
+            )
+        return value

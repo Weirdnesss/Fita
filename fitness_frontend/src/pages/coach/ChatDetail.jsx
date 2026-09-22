@@ -13,6 +13,7 @@ export default function ChatDetail() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const bottomRef = useRef(null);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   useEffect(() => {
     load();
@@ -21,6 +22,32 @@ export default function ChatDetail() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat?.messages?.length]);
+
+  // position: fixed alone isn't reliable once the on-screen keyboard opens --
+  // most mobile browsers don't resize the layout viewport, so a fixed
+  // element can end up hidden behind the keyboard or floating mid-screen.
+  // window.visualViewport tracks the actually-visible area, so we can
+  // measure how much of the screen the keyboard is covering and shift the
+  // composer up to sit right above it. Browsers without visualViewport
+  // support (rare) just keep the previous fixed-to-bottom-nav behavior.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    function handleResize() {
+      const occluded = window.innerHeight - vv.height - vv.offsetTop;
+      setKeyboardOffset(Math.max(0, Math.round(occluded)));
+    }
+
+    vv.addEventListener("resize", handleResize);
+    vv.addEventListener("scroll", handleResize);
+    handleResize();
+
+    return () => {
+      vv.removeEventListener("resize", handleResize);
+      vv.removeEventListener("scroll", handleResize);
+    };
+  }, []);
 
   async function load() {
     try {
@@ -108,7 +135,11 @@ export default function ChatDetail() {
 
       <ErrorBanner message={error} />
 
-      <form onSubmit={handleSend} className="chat-composer" style={composerStyle}>
+      <form
+        onSubmit={handleSend}
+        className="chat-composer"
+        style={{ ...composerStyle, bottom: keyboardOffset > 0 ? keyboardOffset : composerStyle.bottom }}
+      >
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}

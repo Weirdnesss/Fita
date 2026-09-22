@@ -46,6 +46,22 @@ class DataCollectionService:
             lines.append(f"Food allergies/restrictions: {profile.food_allergies}")
         return "\n".join(lines) if lines else "No profile data available."
 
+    def get_current_routines_summary(self):
+        from workouts.models import WorkoutTemplate
+
+        templates = WorkoutTemplate.objects.filter(user=self.user).prefetch_related("exercises")
+        if not templates.exists():
+            return "No saved routines yet."
+
+        lines = []
+        for t in templates:
+            source = "AI-generated" if t.is_generated else "self-made"
+            exercises = t.exercises.order_by("order")
+            lines.append(f"- \"{t.title}\" ({source}, {exercises.count()} exercises):")
+            for ex in exercises:
+                lines.append(f"    - {ex.exercise_name}: {ex.target_sets} sets")
+        return "\n".join(lines)
+
     def get_recent_workouts_summary(self, limit=5):
         history = TemplateHistory.objects.filter(user=self.user)[:limit]
         if not history.exists():
@@ -114,7 +130,9 @@ class DataCollectionService:
             f"{self.get_profile_summary()}\n\n"
             "=== RECENT WEIGHT LOG ===\n"
             f"{self.get_recent_weight_summary()}\n\n"
-            "=== RECENT WORKOUTS ===\n"
+            "=== SAVED ROUTINES (not yet necessarily started/completed) ===\n"
+            f"{self.get_current_routines_summary()}\n\n"
+            "=== RECENT WORKOUTS (completed sessions) ===\n"
             f"{self.get_recent_workouts_summary()}\n\n"
             "=== RECENT NUTRITION ===\n"
             f"{self.get_recent_nutrition_summary()}"

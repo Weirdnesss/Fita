@@ -45,8 +45,13 @@ class LLMService:
         messages = [{"role": "system", "content": self._build_system_prompt(chat.user)}]
 
         # Cap history to keep the context window and Groq's per-minute
-        # token limits under control on the free tier.
-        recent_messages = chat.messages.order_by("-created_at")[:15]
+        # token limits under control on the free tier -- gpt-oss-120b's
+        # free tier is 8,000 TPM, and system prompt + context + a long
+        # completion already eat a meaningful chunk of that on their
+        # own, so chat history (the one open-ended, unbounded input
+        # here) is kept relatively tight rather than the more common
+        # ~20-30 message window other apps might use.
+        recent_messages = chat.messages.order_by("-created_at")[:10]
         for msg in reversed(list(recent_messages)):
             messages.append({"role": msg.role, "content": msg.content})
 

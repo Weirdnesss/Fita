@@ -3,6 +3,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from accounts.models import Profile
 from .models import PerformedExercise, TemplateExercise, TemplateHistory, WgerExercise, WorkoutTemplate
 
 Account = get_user_model()
@@ -436,3 +437,123 @@ class ExerciseCategoryListTests(APITestCase):
     def test_empty_cache_returns_empty_list(self):
         response = self.client.get("/workouts/exercises/categories/")
         self.assertEqual(response.data, [])
+
+
+def _seed_exercise_pool():
+    """A few exercises per DAY_TYPE_CATEGORIES category, enough for generate_workout() to work with."""
+    seeds = [
+        (1, "Bench Press", "Chest", "barbell"),
+        (2, "Push-up", "Chest", "none (bodyweight exercise)"),
+        (3, "Lat Pulldown", "Back", "cable"),
+        (4, "Seated Row", "Back", "cable"),
+        (5, "Squat", "Legs", "barbell"),
+        (6, "Leg Press", "Legs", "machine"),
+        (7, "Shoulder Press", "Shoulders", "dumbbell"),
+        (8, "Lateral Raise", "Shoulders", "dumbbell"),
+        (9, "Bicep Curl", "Arms", "dumbbell"),
+        (10, "Tricep Pushdown", "Arms", "cable"),
+        (11, "Plank", "Abs", "none (bodyweight exercise)"),
+        (12, "Crunch", "Abs", "none (bodyweight exercise)"),
+        (13, "Calf Raise", "Calves", "machine"),
+    ]
+    for id_, name, category, equipment in seeds:
+        WgerExercise.objects.create(id=id_, name=name, category_name=category, equipment_name=equipment)
+
+
+class GenerateWorkoutCooldownBypassTests(APITestCase):
+    """
+    Covers the cooldown-bypass-on-relevant-profile-change behavior:
+    changing workout_frequency/workout_location/primary_goal (the only
+    three fields the generator actually reads) unlocks Generate early;
+    anything else (e.g. activity_level, which the generator doesn't use
+    at all) does not.
+    """
+
+    def setUp(self):
+        self.user = Account.objects.create_user(email="a@test.com", password="pass12345")
+        self.profile = Profile.objects.create(
+            user=self.user, workout_frequency="3-4", workout_location="gym", primary_goal="gain_muscle",
+        )
+        self.client.force_authenticate(user=self.user)
+        _seed_exercise_pool()
+
+    def test_second_generate_within_7_days_is_rate_limited(self):
+        self.client.post("/workouts/generate/")
+        response = self.client.post("/workouts/generate/")
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertIn("next_eligible_at", response.data)
+
+    def test_changing_goal_bypasses_cooldown(self):
+        self.client.post("/workouts/generate/")
+        self.profile.primary_goal = "lose_weight"
+        self.profile.save()
+        response = self.client.post("/workouts/generate/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_changing_frequency_bypasses_cooldown(self):
+        self.client.post("/workouts/generate/")
+        self.profile.workout_frequency = "1-2"
+        self.profile.save()
+        response = self.client.post("/workouts/generate/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_changing_location_bypasses_cooldown(self):
+        self.client.post("/workouts/generate/")
+        self.profile.workout_location = "home"
+        self.profile.save()
+        response = self.client.post("/workouts/generate/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_changing_unrelated_field_does_not_bypass_cooldown(self):
+        """activity_level isn't read by the generator at all -- editing it must not unlock Generate early."""
+        self.client.post("/workouts/generate/")
+        self.profile.activity_level = "very_active"
+        self.profile.save()
+        response = self.client.post("/workouts/generate/")
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_bypass_only_works_once_not_repeatedly(self):
+        """After the bypassed generation, the new snapshot applies -- immediately generating again is still rate limited."""
+        self.client.post("/workouts/generate/")
+        self.profile.primary_goal = "lose_weight"
+        self.profile.save()
+        self.client.post("/workouts/generate/")  # bypassed
+        response = self.client.post("/workouts/generate/")  # should NOT bypass again
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+class GenerateWorkoutMedicalConditionTests(APITestCase):
+    def setUp(self):
+        self.user = Account.objects.create_user(email="a@test.com", password="pass12345")
+        self.client.force_authenticate(user=self.user)
+        _seed_exercise_pool()
+
+    def test_no_condition_on_file_has_no_medical_note(self):
+        Profile.objects.create(user=self.user, workout_frequency="3-4", workout_location="gym", primary_goal="gain_muscle")
+        response = self.client.post("/workouts/generate/")
+        self.assertIsNone(response.data["medical_note"])
+
+    def test_recognized_condition_excludes_matching_category(self):
+        Profile.objects.create(
+            user=self.user, workout_frequency="3-4", workout_location="gym", primary_goal="gain_muscle",
+            medical_conditions="I have chronic knee pain",
+        )
+        response = self.client.post("/workouts/generate/")
+        self.assertIsNotNone(response.data["medical_note"])
+        self.assertIn("Legs", response.data["medical_note"])
+
+        # The 3-4 split is Upper/Lower -- Lower's categories are Legs/Calves/Abs.
+        # With Legs excluded for "knee", Lower should only pull from Calves/Abs.
+        lower_template = next(t for t in response.data["templates"] if "Lower" in t["title"])
+        exercise_names = {ex["exercise_name"] for ex in lower_template["exercises"]}
+        self.assertNotIn("Squat", exercise_names)
+        self.assertNotIn("Leg Press", exercise_names)
+
+    def test_unrecognized_condition_still_shows_generic_note(self):
+        Profile.objects.create(
+            user=self.user, workout_frequency="3-4", workout_location="gym", primary_goal="gain_muscle",
+            medical_conditions="a rare condition not in our keyword list",
+        )
+        response = self.client.post("/workouts/generate/")
+        self.assertIsNotNone(response.data["medical_note"])
+        self.assertIn("doctor or physical therapist", response.data["medical_note"])

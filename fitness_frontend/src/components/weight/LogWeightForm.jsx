@@ -7,6 +7,21 @@ import { useToast } from "../../context/ToastContext";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
+// Matches the backend's WeightLogSerializer.validate_logged_at: the
+// later of (today - 7 days) or account creation. Backdating further
+// back than that is more likely a guess than an actual memory, and
+// there's nothing meaningful to backdate to before the account existed
+// anyway. This is a UI convenience (disables invalid dates up front)
+// -- the backend enforces the same rule regardless, so bypassing this
+// via devtools still gets rejected server-side.
+function earliestLoggableDate(user) {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const signupDate = user?.date_joined ? new Date(user.date_joined) : null;
+  const floor = signupDate && signupDate > sevenDaysAgo ? signupDate : sevenDaysAgo;
+  return floor.toISOString().split("T")[0];
+}
+
 export default function LogWeightForm({ onLogged }) {
   const { user, refreshUser } = useAuth();
   const showToast = useToast();
@@ -16,6 +31,7 @@ export default function LogWeightForm({ onLogged }) {
   const [error, setError] = useState("");
 
   const unitSystem = user?.profile?.unit_system || "metric";
+  const minDate = earliestLoggableDate(user);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -54,11 +70,12 @@ export default function LogWeightForm({ onLogged }) {
         </div>
         <div>
           <label>Date</label>
-          <input type="date" max={todayStr()} value={loggedAt} onChange={(e) => setLoggedAt(e.target.value)} />
+          <input type="date" min={minDate} max={todayStr()} value={loggedAt} onChange={(e) => setLoggedAt(e.target.value)} />
         </div>
       </div>
       <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-        Logging again for a date you've already logged updates that entry instead of adding a duplicate.
+        You can log up to 7 days back (or since you joined, if that's sooner). Logging again for a date you've
+        already logged updates that entry instead of adding a duplicate.
       </p>
       <ErrorBanner message={error} />
       <button className="btn btn-primary" disabled={saving}>{saving ? "Saving..." : "Log Weight"}</button>

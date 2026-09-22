@@ -1,6 +1,7 @@
 import logging
 
 from django.shortcuts import get_object_or_404
+from openai import RateLimitError
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -65,6 +66,22 @@ class SendMessageView(APIView):
         try:
             llm_service = LLMService()
             reply_text = llm_service.get_response(chat)
+        except RateLimitError as e:
+            # Distinguished from the generic case below because it's a
+            # meaningfully different situation for the user: nothing is
+            # actually broken, they (or the app's shared Groq free-tier
+            # quota) just hit the per-minute cap. Groq sends a
+            # retry-after header with a concrete wait time when this
+            # happens -- surfaced here so the message can be specific
+            # ("try again in 8s") rather than a generic apology.
+            retry_after = e.response.headers.get("retry-after") if e.response else None
+            logger.warning("Groq rate limit hit for chat %s (retry_after=%s)", chat_id, retry_after)
+            message = "The assistant is getting a lot of requests right now."
+            if retry_after:
+                message += f" Please try again in about {retry_after} seconds."
+            else:
+                message += " Please try again in a moment."
+            return Response({"error": message}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         except Exception:
             # Full detail (which can include config errors like a
             # missing GROQ_API_KEY, or raw SDK/network exceptions) goes

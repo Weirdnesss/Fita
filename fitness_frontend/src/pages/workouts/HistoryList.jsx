@@ -11,28 +11,20 @@ import {
 
 import { listHistory } from "../../api/workouts";
 
+const HISTORY_PAGE_SIZE = 10;
+
 export default function HistoryList() {
   const navigate = useNavigate();
 
-    const [history, setHistory] = useState(null);
-    const [error, setError] = useState("");
-    const [page, setPage] = useState(1);
-
-    const ITEMS_PER_PAGE = 10;
+  const [history, setHistory] = useState(null);
+  const [error, setError] = useState("");
+  const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
 
   useEffect(() => {
     load();
   }, []);
 
-  const totalPages = history
-    ? Math.ceil(history.length / ITEMS_PER_PAGE)
-    : 0;
-
-  const startIndex = (page - 1) * ITEMS_PER_PAGE;
-
-  const visibleHistory = history
-    ? history.slice(startIndex, startIndex + ITEMS_PER_PAGE)
-    : [];
+  const visibleHistory = history ? history.slice(0, visibleCount) : [];
 
   async function load() {
     try {
@@ -134,29 +126,15 @@ export default function HistoryList() {
             </div>
           ))}
           </div>
-          {totalPages > 1 && (
-            <div className="pagination">
-                <button
-                className="btn btn-secondary"
-                onClick={() => setPage((p) => p - 1)}
-                disabled={page === 1}
-                >
-                Previous
-                </button>
-
-                <span className="pagination-info">
-                Page {page} of {totalPages}
-                </span>
-
-                <button
-                className="btn btn-secondary"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={page === totalPages}
-                >
-                Next
-                </button>
-            </div>
-            )}
+          {history.length > visibleCount && (
+            <button
+              className="btn btn-secondary"
+              style={{ width: "100%", marginTop: 4 }}
+              onClick={() => setVisibleCount((c) => c + HISTORY_PAGE_SIZE)}
+            >
+              Load More ({history.length - visibleCount} left)
+            </button>
+          )}
         </div>
       )}
     </div>
