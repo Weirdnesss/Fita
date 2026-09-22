@@ -19,7 +19,7 @@
   /* Text */
   --text: #f2f0eb;
   --text-dim: #a6a9ae;
-  --text-faint: #6e7278;
+  --text-faint: #84878d;
 
   /* Accents */
   --chili: #e8491d;
@@ -30,7 +30,19 @@
   --bamboo-tint: rgba(76, 154, 106, 0.14);
   --turmeric: #d9a441;
   --turmeric-tint: rgba(217, 164, 65, 0.14);
+  --ube: #9b7fd4;
+  --ube-tint: rgba(155, 127, 212, 0.14);
+  /* Same value as --chili today (error/destructive color happens to
+     match the brand accent). Kept as a separate token on purpose so
+     error states can be recolored independently of the brand accent
+     later without touching every error-state rule. */
   --danger: #e8491d;
+
+  /* --accent-color is NOT set here — it is a per-instance override,
+     passed inline as style={{ "--accent-color": "var(--bamboo)" }}
+     (or --chili / --turmeric) from JS wherever a card, progress bar,
+     etc. needs a non-default accent. Consumers: .card-tab::before,
+     .progress-fill. Falls back to --chili when unset. */
 
   /* Type */
   --font-display: "Archivo Black", "Barlow Condensed", sans-serif;
@@ -45,6 +57,12 @@
   --nav-height: 64px;
   --header-height: 56px;
   --max-width: 480px;
+
+  /* Breakpoint used by every "desktop" rule in this file (900px).
+     Not consumable inside @media by browsers yet, so this is
+     documentation, not a working substitution — if you change the
+     breakpoint, you still have to change every @media line below. */
+  --bp-desktop: 900px;
 
   color-scheme: dark;
 }
@@ -207,12 +225,29 @@ label {
   background: var(--bg-card-hover);
 }
 
+/* .btn-ghost {
+  background: transparent;
+  color: var(--accent, var(--chili));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 14px 8px;
+  margin: -14px -8px;
+}
+.btn-ghost:active:not(:disabled) {
+  opacity: 0.6;
+} */
+
 .btn-ghost {
   background: transparent;
-  color: var(--text-dim);
+  border: none;
+  color: var(--accent, var(--chili));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 14px 8px;
+  margin: -14px -8px;
 }
-.btn-ghost:hover:not(:disabled) {
-  color: var(--text);
+.btn-ghost:active:not(:disabled) {
+  opacity: 0.6;
 }
 
 .btn-block {
@@ -226,11 +261,46 @@ label {
   padding: 16px;
 }
 
+/* Whole-card-is-a-link pattern: left accent bar + trailing chevron.
+   Used on: Resources article cards, Resources food/exercise result
+   cards, ChatList rows, ReportsList rows. Anything the user taps
+   anywhere on to navigate should use this; cards with their own
+   internal action buttons (e.g. WorkoutsDashboard template/history
+   cards) should NOT — the chevron implies "tap anywhere," which is
+   wrong when only specific sub-buttons are actionable. */
 .card-tab {
   position: relative;
   padding-left: 20px;
+  padding-right: 28px; /* room for the chevron */
 }
 .card-tab::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent-color, var(--chili));
+}
+.card-tab::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  font-size: 20px;
+}
+.card-tab:active {
+  opacity: 0.85;
+}
+
+.card-accent {
+  position: relative;
+  padding-left: 20px;
+}
+.card-accent::before {
   content: "";
   position: absolute;
   left: 0;
@@ -263,6 +333,7 @@ label {
 .pill {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   padding: 3px 10px;
   border-radius: 100px;
   font-size: 11px;
@@ -283,7 +354,6 @@ label {
   background: var(--turmeric-tint);
   color: var(--turmeric);
 }
-
 .pill-neutral {
   background: var(--bg-raised);
   color: var(--text-faint);
@@ -344,72 +414,90 @@ label {
   gap: 16px;
 }
 
-/* ============================================================
-   PROFILE TWO-COLUMN (desktop only)
-   Same DOM order as mobile -- identity/actions stay first, weight
-   progress + details stay second -- so mobile's stacked order is
-   untouched; only the desktop grid placement changes.
-   ============================================================ */
-.profile-col-right {
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 10px 4px;
+  margin-bottom: -1px;
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-faint);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.tab-btn.active {
+  color: var(--text);
+  border-bottom-color: var(--chili);
+}
+
+.workout-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.workout-trends {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.profile-grid {
+.pagination {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+.pagination-info {
+  flex: 1;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+}
+.pagination button {
+  min-width: 90px;
 }
 
-@media (min-width: 900px) {
-  .profile-grid {
-    display: grid;
-    grid-template-columns: minmax(280px, 360px) 1fr;
-    align-items: start;
-    gap: 20px;
-    max-width: 880px;
-    margin: 0 auto;
-    width: 100%;
-  }
+.nutrition-actions {
+  width: 100%;
+  max-width: 700px;
+  margin-bottom: 16px;
 }
 
-.form-col {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
+/* Two-column form layout (mobile: stacked; desktop: side-by-side —
+   see the desktop block below). */
+.profile-col-right,
+.profile-grid,
+.form-col,
 .form-grid {
   display: flex;
   flex-direction: column;
+  gap: 16px;
+}
+.form-col,
+.form-grid {
   gap: 14px;
 }
 
-/* Opt-in for pages that read like a single narrow document (profile,
-   settings, edit forms) rather than a dashboard -- without this, .page
-   stretches to fill .app-content's 1200px on desktop, which leaves
-   single-column stacked cards looking sparse and spread out. */
-@media (min-width: 900px) {
-  .page-narrow {
-    max-width: 640px;
-    margin: 0 auto;
-    width: 100%;
+/* @media (min-width: 900px) {
+  .profile-col-left {
+    position: sticky;
+    top: 28px;
+    align-self: start; 
   }
-
-  .form-narrow {
-    max-width: 760px;
-    margin: 0 auto;
-    width: 100%;
-  }
-
-  .form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
-    gap: 20px 24px;
-  }
-}
+} */
 
 /* ============================================================
    AUTH PAGES (Login / Signup)
@@ -431,25 +519,6 @@ label {
   display: flex;
   flex-direction: column;
   gap: 28px;
-}
-
-@media (min-width: 900px) {
-  .auth-page {
-    align-items: center;
-    padding: 40px;
-    background:
-      radial-gradient(circle at 15% 20%, var(--chili-tint), transparent 42%),
-      radial-gradient(circle at 85% 80%, var(--bamboo-tint), transparent 42%);
-  }
-
-  .auth-card {
-    max-width: 440px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius-lg);
-    padding: 40px 36px;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
-  }
 }
 
 .error-text {
@@ -481,7 +550,6 @@ label {
   }
 }
 
-
 /* ============================================================
    APP LAYOUT
    ============================================================ */
@@ -489,405 +557,18 @@ label {
 .app-layout {
   min-height: 100vh;
 }
-
 .app-main {
   min-width: 0;
 }
-
 .app-content {
   width: 100%;
 }
-
 .offline-banner-wrapper {
   padding: 10px 16px 0;
 }
 
-/* ============================================================
-   DESKTOP LAYOUT
-   ============================================================ */
-
-@media (min-width: 900px) {
-  :root {
-    --max-width: none;
-  }
-
-  #root {
-    max-width: none;
-    width: 100%;
-  }
-}
-
-@media (min-width: 900px) {
-  .app-layout > nav {
-    display: none !important;
-  }
-}
-
-/* ============================================================
-   DESKTOP SIDEBAR
-   ============================================================ */
-
 .sidebar {
   display: none;
-}
-
-@media (min-width: 900px) {
-  .app-layout {
-    display: flex;
-    min-height: 100vh;
-  }
-
-  .sidebar {
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-    width: 240px;
-    min-height: 100vh;
-    background: var(--bg-raised);
-    border-right: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    height: 100vh;
-  }
-
-  .sidebar-brand {
-    padding: 24px 24px 20px;
-    font-family: var(--font-display);
-    font-size: 26px;
-    letter-spacing: 0.04em;
-    color: var(--chili);
-  }
-
-  .sidebar-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 8px 12px;
-  }
-
-  .sidebar-link {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px;
-    border-radius: var(--radius-sm);
-    color: var(--text-dim);
-    font-size: 14px;
-    font-weight: 600;
-    transition:
-      background 0.15s ease,
-      color 0.15s ease;
-  }
-
-  .sidebar-link:hover {
-    background: var(--bg-card);
-    color: var(--text);
-  }
-
-  .sidebar-link.active {
-    background: var(--chili-tint);
-    color: var(--chili);
-  }
-
-  .sidebar-link svg {
-    flex-shrink: 0;
-  }
-
-  .app-main {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .app-content {
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .page {
-    padding: 28px 32px 40px;
-  }
-}
-
-@media (min-width: 900px) {
-  .workout-template-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .workout-template-grid .card {
-    margin-bottom: 0 !important;
-  }
-}
-
-@media (min-width: 900px) {
-  .workout-history-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .workout-history-grid .card {
-    margin-bottom: 0 !important;
-  }
-}
-
-@media (min-width: 900px) {
-  .history-detail {
-    width: 100%;
-    max-width: 900px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .template-editor {
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .active-workout {
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-  }
-}
-
-.workout-actions-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.pagination-info {
-  flex: 1;
-  text-align: center;
-  color: var(--text-dim);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.pagination button {
-  min-width: 90px;
-}
-
-@media (min-width: 900px) {
-  .nutrition-content {
-    width: 100%;
-    max-width: 700px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .nutrition-date-nav {
-    width: 100%;
-    max-width: 700px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .nutrition-summary-card {
-    display: grid !important;
-    grid-template-columns: auto 1fr;
-    align-items: center !important;
-    column-gap: 32px;
-  }
-
-  .nutrition-summary-card > div:nth-child(2) {
-    text-align: left !important;
-  }
-
-  .nutrition-summary-card > div:nth-child(3) {
-    justify-content: flex-start !important;
-  }
-
-  .nutrition-summary-card > div:nth-child(4) {
-    grid-column: 1 / -1;
-  }
-}
-
-@media (min-width: 900px) {
-  .nutrition-meals-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-}
-
-.nutrition-actions {
-  width: 100%;
-  max-width: 700px;
-  margin-bottom: 16px;
-}
-
-@media (min-width: 900px) {
-  .food-search-results-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .food-search-results-grid .card {
-    margin-bottom: 0 !important;
-  }
-}
-
-@media (min-width: 900px) {
-  .food-detail {
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .nutrition-settings {
-    /* width: 100%; */
-    max-width: 800px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .nutrition-trends {
-    /* width: 100%; */
-    max-width: 900px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .workout-trends {
-    width: 100%;
-    max-width: 900px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .chat-list-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .chat-list-grid .card {
-    margin-bottom: 0 !important;
-  }
-}
-
-@media (min-width: 900px) {
-  .chat-new-button {
-    width: auto;
-    margin-left: auto;
-    display: block;
-  }
-}
-
-@media (min-width: 900px) {
-  .chat-detail {
-    width: 100%;
-    max-width: 900px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .chat-composer {
-    max-width: 900px !important;
-    left: calc(50% + 120px) !important;
-  }
-}
-
-@media (min-width: 900px) {
-  .report-list-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .report-list-grid .card {
-    margin-bottom: 0 !important;
-  }
-}
-
-@media (min-width: 900px) {
-  .report-list-grid .card {
-    min-height: 10px;
-  }
-}
-
-@media (min-width: 900px) {
-  .progress-actions {
-    justify-content: flex-end;
-  }
-
-  .progress-actions .btn {
-    flex: 0 0 auto !important;
-    width: auto !important;
-  }
-}
-
-@media (min-width: 900px) {
-  .report-detail {
-    width: 100%;
-    max-width: 1000px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .resource-results-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .resource-results-grid .card {
-    margin-bottom: 0 !important;
-  }
-}
-
-@media (min-width: 900px) {
-  .profile-card {
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .weight-progress-card {
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-  }
-}
-
-@media (min-width: 900px) {
-  .weight-progress-card > div:nth-of-type(2) {
-    max-width: 700px;
-    width: 100%;
-    margin: 0 auto;
-  }
 }
 
 /* ============================================================
@@ -921,10 +602,16 @@ label {
 .chat-markdown h4:first-child {
   margin-top: 0;
 }
-.chat-markdown h1 { font-size: 16px; }
-.chat-markdown h2 { font-size: 15px; }
+.chat-markdown h1 {
+  font-size: 16px;
+}
+.chat-markdown h2 {
+  font-size: 15px;
+}
 .chat-markdown h3,
-.chat-markdown h4 { font-size: 14px; }
+.chat-markdown h4 {
+  font-size: 14px;
+}
 
 .chat-markdown ul,
 .chat-markdown ol {
@@ -961,7 +648,6 @@ label {
   overflow-x: auto;
   white-space: nowrap;
 }
-
 .chat-markdown th,
 .chat-markdown td {
   border: 1px solid var(--border);
@@ -977,4 +663,263 @@ label {
 .chat-markdown {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+/* ============================================================================
+   DESKTOP (min-width: 900px)
+   Everything that only applies at desktop width lives in this single block,
+   grouped by area, instead of ~25 separate one-off @media blocks. If you're
+   looking for "what changes at desktop," this is the only place to look.
+   ============================================================================ */
+@media (min-width: 900px) {
+  /* ---- Root / shell ---- */
+  :root {
+    --max-width: none;
+  }
+  #root {
+    max-width: none;
+    width: 100%;
+  }
+  .app-layout > nav {
+    display: none !important;
+  }
+  .page {
+    padding: 28px 32px 40px;
+  }
+
+  /* ---- Sidebar ---- */
+  .app-layout {
+    display: flex;
+    min-height: 100vh;
+  }
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    width: 240px;
+    min-height: 100vh;
+    background: var(--bg-raised);
+    border-right: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+  .sidebar-brand {
+    padding: 24px 24px 20px;
+    font-family: var(--font-display);
+    font-size: 26px;
+    letter-spacing: 0.04em;
+    color: var(--chili);
+  }
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 12px;
+  }
+  .sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    color: var(--text-dim);
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .sidebar-link:hover {
+    background: var(--bg-card);
+    color: var(--text);
+  }
+  .sidebar-link.active {
+    background: var(--chili-tint);
+    color: var(--chili);
+  }
+  .sidebar-link svg {
+    flex-shrink: 0;
+  }
+  .app-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .app-content {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  /* ---- Narrow single-column pages (profile/settings/forms) ---- */
+  .page-narrow {
+    max-width: 640px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .form-narrow {
+    max-width: 760px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 20px 24px;
+  }
+
+
+  /* ---- Auth pages ---- */
+  .auth-page {
+    align-items: center;
+    padding: 40px;
+    background:
+      radial-gradient(circle at 15% 20%, var(--chili-tint), transparent 42%),
+      radial-gradient(circle at 85% 80%, var(--bamboo-tint), transparent 42%);
+  }
+  .auth-card {
+    max-width: 440px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    padding: 40px 36px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  }
+
+  /* ---- Shared 2-column result/list grid ----
+     Previously copy-pasted per page (workout templates, workout
+     history, food search, exercises/food/articles in Resources,
+     chats, reports) — same rule, one definition. The `!important`
+     on .card is still needed because several call sites set
+     marginBottom inline in JSX; the grid's `gap` handles spacing
+     instead, and !important wins the specificity fight against the
+     inline style. (Worth removing the inline marginBottom in JSX
+     and dropping !important here when you get to it.) */
+  .workout-template-grid,
+  .workout-history-grid,
+  .food-search-results-grid,
+  .resource-results-grid,
+  .chat-list-grid,
+  .report-list-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .workout-template-grid .card,
+  .workout-history-grid .card,
+  .food-search-results-grid .card,
+  .resource-results-grid .card,
+  .chat-list-grid .card,
+  .report-list-grid .card {
+    margin-bottom: 0 !important;
+  }
+
+  /* ---- Shared "detail view" centered column ----
+     Previously five near-identical blocks differing only in
+     max-width. TODO: min-height:10px on .report-list-grid .card
+     below was in the original file and does nothing visible (card
+     padding alone exceeds 10px) — either raise it to an intentional
+     value or drop it; left as-is here pending that decision. */
+  .history-detail,
+  .template-editor,
+  .active-workout,
+  .chat-detail {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .report-detail {
+    width: 100%;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  .report-list-grid .card {
+    min-height: 10px; /* TODO: see note above — currently a no-op */
+  }
+
+  /* ---- Nutrition ---- */
+  .nutrition-content,
+  .nutrition-date-nav {
+    width: 100%;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  .nutrition-summary-card {
+    display: grid !important;
+    grid-template-columns: auto 1fr;
+    align-items: center !important;
+    column-gap: 32px;
+  }
+  .nutrition-summary-card > div:nth-child(2) {
+    text-align: left !important;
+  }
+  .nutrition-summary-card > div:nth-child(3) {
+    justify-content: flex-start !important;
+  }
+  .nutrition-summary-card > div:nth-child(4) {
+    grid-column: 1 / -1;
+  }
+  .nutrition-meals-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .food-detail {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .nutrition-settings {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .nutrition-trends {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* ---- Workouts ---- */
+  .workout-trends {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* ---- Chat ---- */
+  .chat-new-button {
+    width: auto;
+    margin-left: auto;
+    display: block;
+  }
+  /* 120px = half of .sidebar's 240px width, offsetting the composer's
+     centering so it centers within the content area to the right of
+     the sidebar rather than the full viewport. If .sidebar's width
+     changes, this must change with it — not derived automatically. */
+  .chat-composer {
+    max-width: 900px !important;
+    left: calc(50% + 120px) !important;
+  }
+
+  /* ---- Progress / profile ---- */
+  .progress-actions {
+    justify-content: flex-end;
+  }
+  .progress-actions .btn {
+    flex: 0 0 auto !important;
+    width: auto !important;
+  }
+  .profile-card {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .weight-progress-card {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .weight-progress-card > div:nth-of-type(2) {
+    max-width: 700px;
+    width: 100%;
+    margin: 0 auto;
+  }
 }

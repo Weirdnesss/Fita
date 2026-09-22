@@ -1,36 +1,58 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { updateProfile, logWeight } from "../api/accounts";
-import { ErrorBanner, extractErrorMessage } from "./Status";
+import { updateProfile, logWeight, listWeightLogs } from "../api/accounts";
+import { ErrorBanner, Loading, extractErrorMessage } from "./Status";
 import WeightField from "./WeightField";
+import WeightChart from "./weight/WeightChart";
+import WeightHistoryList from "./weight/WeightHistoryList";
 import { formatWeight } from "../lib/profile";
 import { useToast } from "../context/ToastContext";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
-// Embedded on the Profile page -- deliberately minimal (a glance +
-// two big actions), not the full chart/history experience. That lives
-// at /profile/weight (see pages/WeightLog.jsx) so a first-time user
-// isn't faced with a graph and a log table before they've even logged
-// anything. Doesn't need the weight-log list at all -- current weight
-// comes straight from the already-derived profile.current_weight_kg.
+// Embedded on the Profile page. Log/goal actions stay up top (the
+// quick path -- defaults to today, no date field), with Trend and
+// History as tabs below. Previously the full chart/history lived at
+// /profile/weight (pages/WeightLog.jsx) as a separate destination;
+// merged in here so there's exactly one place weight lives, not two
+// partially-overlapping ones. /profile/weight and WeightLog.jsx
+// should be removed once this ships (see App.jsx routes).
 export default function WeightProgress() {
   const { user, refreshUser } = useAuth();
   const showToast = useToast();
   const [mode, setMode] = useState(null); // null | "log" | "goal"
+  const [tab, setTab] = useState("trend"); // "trend" | "history"
+  const [logs, setLogs] = useState(null);
+  const [error, setError] = useState("");
 
   const currentWeight = user?.profile?.current_weight_kg ?? null;
   const currentGoal = user?.profile?.goal_weight_kg ?? null;
   const unitSystem = user?.profile?.unit_system || "metric";
+  const primaryGoal = user?.profile?.primary_goal ?? null;
+  const bmi = user?.profile?.bmi ?? null;
+  
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    try {
+      const data = await listWeightLogs();
+      setLogs(data);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Couldn't load weight history."));
+    }
+  }
 
   return (
     <div className="card weight-progress-card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <h3>Weight</h3>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <StatTile label="Current" value={currentWeight != null ? formatWeight(currentWeight, unitSystem) : "Not logged"} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+        <StatTile label="Current" value={currentWeight != null ? formatWeight(currentWeight, unitSystem) : "Not logged"} accent="bamboo" />
         <StatTile label="Goal" value={currentGoal != null ? formatWeight(currentGoal, unitSystem) : "Not set"} accent="turmeric" />
+        <StatTile label="BMI" value={bmi ?? "--"} accent="ube" />
       </div>
 
       {mode === null && (
@@ -47,7 +69,12 @@ export default function WeightProgress() {
       {mode === "log" && (
         <QuickLogForm
           unitSystem={unitSystem}
-          onDone={async () => { await refreshUser(); showToast("Weight logged", "success"); setMode(null); }}
+          onDone={async () => {
+            await refreshUser();
+            await load(); // new entry needs to show up in the chart/history below immediately
+            showToast("Weight logged", "success");
+            setMode(null);
+          }}
           onCancel={() => setMode(null)}
         />
       )}
@@ -60,9 +87,36 @@ export default function WeightProgress() {
         />
       )}
 
-      <Link to="/profile/weight" style={{ fontSize: 13, color: "var(--chili)", fontWeight: 600, textAlign: "center" }}>
-        View history &amp; trends &rarr;
-      </Link>
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="tab-bar" style={{ marginBottom: 14 }}>
+          <button className={`tab-btn${tab === "trend" ? " active" : ""}`} onClick={() => setTab("trend")}>
+            Trend
+          </button>
+          <button className={`tab-btn${tab === "history" ? " active" : ""}`} onClick={() => setTab("history")}>
+            History
+          </button>
+        </div>
+
+        <ErrorBanner message={error} />
+
+        {logs === null && !error && <Loading />}
+
+        {logs !== null && logs.length === 0 && (
+          <p style={{ fontSize: 13, color: "var(--text-faint)" }}>No entries yet -- log your first weight above.</p>
+        )}
+
+        {logs?.length > 0 && tab === "trend" && (
+          <WeightChart logs={logs} goalWeightKg={currentGoal} primaryGoal={primaryGoal} unitSystem={unitSystem} />
+        )}
+
+        {logs?.length > 0 && tab === "history" && (
+          <WeightHistoryList
+            logs={logs}
+            unitSystem={unitSystem}
+            onDeleted={load}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -76,8 +130,6 @@ function StatTile({ label, value, accent }) {
   );
 }
 
-// No date field on purpose -- this is the quick path (defaults to
-// today). Logging for a past date is a /profile/weight thing.
 function QuickLogForm({ unitSystem, onDone, onCancel }) {
   const [weightKg, setWeightKg] = useState("");
   const [saving, setSaving] = useState(false);

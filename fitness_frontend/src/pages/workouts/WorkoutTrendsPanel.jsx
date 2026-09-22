@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
 import { getWorkoutTrends, getExerciseFrequency, getExerciseProgression } from "../../api/workouts";
 
@@ -14,7 +13,13 @@ const PROGRESSION_PERIODS = [
   ["all", "All Time"],
 ];
 
-export default function WorkoutTrends() {
+// Unlike Routines/History, Trends can't just be sliced from data the
+// dashboard already fetched on mount -- it's its own period-scoped
+// query. So this panel fetches lazily on its own first mount (i.e.
+// the first time the Trends tab is opened) rather than eagerly
+// alongside templates/history, and re-fetches only when the period
+// changes from there.
+export default function WorkoutTrendsPanel() {
   const [period, setPeriod] = useState("week");
   const [trends, setTrends] = useState(null);
   const [error, setError] = useState("");
@@ -28,8 +33,7 @@ export default function WorkoutTrends() {
   }, [period]);
 
   return (
-    <div className="page workout-trends">
-      <PageHeader title="Trends" subtitle="Your training volume over time" back />
+    <div className="workout-trends">
       <ErrorBanner message={error} />
 
       <div style={{ display: "flex", gap: 8 }}>

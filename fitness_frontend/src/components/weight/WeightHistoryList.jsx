@@ -7,15 +7,20 @@ import ConfirmDialog from "../ConfirmDialog";
 import { formatWeight } from "../../lib/profile";
 import { useToast } from "../../context/ToastContext";
 
+const PAGE_SIZE = 10;
+
 // `limit`: cap how many entries show, with a link to the full history
 // page for the rest (used on the embedded Profile card). Omit it for
-// the dedicated /profile/weight page, which shows everything.
+// the dedicated /profile/weight page, which instead paginates via
+// Load More rather than showing everything at once or linking anywhere
+// (there's nowhere further to link to -- this already is the full-history page).
 export default function WeightHistoryList({ logs, unitSystem, limit, onDeleted, heading }) {
   const { refreshUser } = useAuth();
   const showToast = useToast();
   const navigate = useNavigate();
   const [deletingId, setDeletingId] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null); // { id, weightKg } | null
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   async function confirmDelete() {
     const { id, weightKg } = pendingDelete;
@@ -33,8 +38,9 @@ export default function WeightHistoryList({ logs, unitSystem, limit, onDeleted, 
     }
   }
 
-  const visible = limit ? logs?.slice(0, limit) : logs;
-  const hasMore = limit && logs && logs.length > limit;
+  const visible = limit ? logs?.slice(0, limit) : logs?.slice(0, visibleCount);
+  const hasMoreLink = limit && logs && logs.length > limit;
+  const hasMoreToLoad = !limit && logs && logs.length > visibleCount;
 
   return (
     <div>
@@ -58,13 +64,22 @@ export default function WeightHistoryList({ logs, unitSystem, limit, onDeleted, 
           </button>
         </div>
       ))}
-      {hasMore && (
+      {hasMoreLink && (
         <button
           className="btn-ghost"
           style={{ background: "none", border: "none", padding: "10px 0 0", fontSize: 13, color: "var(--chili)", fontWeight: 600 }}
           onClick={() => navigate("/profile/weight")}
         >
           View full history ({logs.length}) &rarr;
+        </button>
+      )}
+      {hasMoreToLoad && (
+        <button
+          className="btn btn-secondary"
+          style={{ width: "100%", marginTop: 10 }}
+          onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+        >
+          Load More ({logs.length - visibleCount} left)
         </button>
       )}
 

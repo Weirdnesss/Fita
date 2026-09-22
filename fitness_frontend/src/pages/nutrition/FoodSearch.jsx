@@ -230,8 +230,8 @@ function FoodDetail({ food, logDate, editingEntryId, editingMealType, onBack, on
       <PageHeader
         title={food.name}
         subtitle={food.local_name || undefined}
-        back={false}
-        action={<button className="btn-ghost" style={{ background: "none", border: "none" }} onClick={onBack}>Back to Search</button>}
+        back
+        onBack={onBack}
       />
 
       {logDate && logDate !== new Date().toISOString().slice(0, 10) && (

@@ -455,7 +455,7 @@ function ExerciseSearch({ onAdd, onClose }) {
 
   return (
     <div className="page">
-      <PageHeader title="Add Exercise" back={false} action={<button className="btn-ghost" style={{ background: "none", border: "none" }} onClick={onClose}>Close</button>} />
+      <PageHeader title="Add Exercise" back onBack={onClose} />
       <input autoFocus placeholder="Search for an exercise" value={query} onChange={(e) => setQuery(e.target.value)} />
 
       {categories.length > 0 && (

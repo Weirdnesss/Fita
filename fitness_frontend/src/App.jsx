@@ -9,14 +9,11 @@ import Signup from "./pages/auth/Signup";
 import Onboarding from "./pages/auth/Onboarding";
 import ProfilePage from "./pages/ProfilePage";
 import EditProfile from "./pages/EditProfile";
-import WeightLog from "./pages/WeightLog";
 
 import WorkoutsDashboard from "./pages/workouts/WorkoutsDashboard";
 import TemplateEditor from "./pages/workouts/TemplateEditor";
 import ActiveWorkout from "./pages/workouts/ActiveWorkout";
 import HistoryDetail from "./pages/workouts/HistoryDetail";
-import HistoryList from "./pages/workouts/HistoryList";
-import WorkoutTrends from "./pages/workouts/WorkoutTrends";
 
 import NutritionDashboard from "./pages/nutrition/NutritionDashboard";
 import FoodSearch from "./pages/nutrition/FoodSearch";
@@ -57,16 +54,12 @@ export default function App() {
             >
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/edit" element={<EditProfile />} />
-              <Route path="/profile/weight" element={<WeightLog />} />
 
               <Route path="/workouts" element={<WorkoutsDashboard />} />
               <Route path="/workouts/new" element={<TemplateEditor />} />
               <Route path="/workouts/templates/:id" element={<TemplateEditor />} />
               <Route path="/workouts/templates/:id/start" element={<ActiveWorkout />} />
               <Route path="/workouts/history/:id" element={<HistoryDetail />} />
-              <Route path="/workouts/history" element={<HistoryList />} />
-              <Route path="/workouts/trends" element={<WorkoutTrends />} />
-
               <Route path="/nutrition" element={<NutritionDashboard />} />
               <Route path="/nutrition/search" element={<FoodSearch />} />
               <Route path="/nutrition/settings" element={<NutritionSettings />} />

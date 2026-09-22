@@ -10,7 +10,6 @@ import { isProfileIncomplete, formatHeight } from "../lib/profile";
 export default function ProfilePage() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
-  const [showDetails, setShowDetails] = useState(false);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
 
   if (loading) return <div className="page"><Loading /></div>;
@@ -20,17 +19,17 @@ export default function ProfilePage() {
   const initials = `${user.first_name?.[0] || ""}${user.last_name?.[0] || ""}`.toUpperCase();
   const incomplete = isProfileIncomplete(profile);
 
-   async function confirmLogout() {
+  async function confirmLogout() {
     setConfirmingLogout(false);
     await logout();
     navigate("/login");
   }
 
   return (
-    <div className="page">
+    <div className="page page-narrow">
       <PageHeader title="Profile" />
 
-        {incomplete && (
+      {incomplete && (
         <div className="card" style={{ background: "var(--chili-tint)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 13, color: "var(--chili)" }}>
             Finish setting up your profile so goals and routines can be personalized for you.
@@ -54,40 +53,23 @@ export default function ProfilePage() {
                 <h2 style={{ textTransform: "none" }}>{user.first_name} {user.last_name}</h2>
                 <p style={{ color: "var(--text-dim)", fontSize: 13 }}>{user.email}</p>
               </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8 }}>
               <button
                 className="btn btn-secondary"
-                style={{ padding: "8px 14px", fontSize: 13, flexShrink: 0 }}
+                style={{ padding: "10px 14px", fontSize: 13, flex: 1 }}
                 onClick={() => navigate("/profile/edit")}
               >
                 Edit
               </button>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <div style={{ width: "50%" }}>
-                <StatBox label="BMI" value={profile.bmi ?? "--"} unit="" accent="turmeric" />
-              </div>
-            </div>
-
-            <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 16 }}>
               <button
-                onClick={() => setShowDetails((s) => !s)}
-                style={{ background: "none", border: "none", padding: 0, width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                className="btn btn-secondary"
+                style={{ padding: "10px 14px", fontSize: 13, flex: 1, color: "var(--chili)" }}
+                onClick={() => setConfirmingLogout(true)}
               >
-                <h3>Details</h3>
-                <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{showDetails ? "Hide" : "Show"}</span>
+                Log Out
               </button>
-              {showDetails && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
-                  <DetailRow label="Primary goal" value={formatChoice(profile.primary_goal)} />
-                  <DetailRow label="Activity level" value={formatChoice(profile.activity_level)} />
-                  <DetailRow label="Height" value={formatHeight(profile.height_cm, profile.unit_system) || "--"} />
-                  <DetailRow label="Workout frequency" value={profile.workout_frequency ? `${profile.workout_frequency} / week` : "--"} />
-                  <DetailRow label="Workout location" value={formatChoice(profile.workout_location)} />
-                  {profile.medical_conditions && <DetailRow label="Medical conditions" value={profile.medical_conditions} />}
-                  {profile.food_allergies && <DetailRow label="Food allergies" value={profile.food_allergies} />}
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -96,14 +78,6 @@ export default function ProfilePage() {
           <WeightProgress />
         </div>
       </div>
-
-      <button
-        className="btn-ghost"
-        style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 13, textAlign: "center", padding: "8px 0" }}
-        onClick={() => setConfirmingLogout(true)}
-      >
-        Log Out
-      </button>
 
       <ConfirmDialog
         open={confirmingLogout}

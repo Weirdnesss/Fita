@@ -71,7 +71,7 @@ export default function ReportDetail() {
       )}
 
       {recommendations.length > 0 && (
-        <div className="card">
+        <div className="card card-accent" style={{ "--accent-color": "var(--ube)" }}>
           <h3 style={{ marginBottom: 10 }}>Recommendations</h3>
           {recommendations.map((rec, i) => (
             <div key={i} style={{ display: "flex", gap: 8, padding: "6px 0", borderTop: i > 0 ? "1px solid var(--border-soft)" : "none" }}>
@@ -89,7 +89,7 @@ export default function ReportDetail() {
 
 function Section({ title, accent, body }) {
   return (
-    <div className="card card-tab" style={{ "--accent-color": `var(--${accent})` }}>
+    <div className="card card-accent" style={{ "--accent-color": `var(--${accent})` }}>
       <h3 style={{ marginBottom: 8 }}>{title}</h3>
       <p style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{body}</p>
     </div>

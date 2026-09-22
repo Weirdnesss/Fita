@@ -460,7 +460,7 @@ def generate_workout(user):
     templates = []
     for day_type in split:
         categories = DAY_TYPE_CATEGORIES[day_type]
-        title = f"{DAY_TYPE_LABELS[day_type]} (Generated)"
+        title = {DAY_TYPE_LABELS[day_type]}
         template = existing_by_day_type.get(day_type)
 
         if template is None:

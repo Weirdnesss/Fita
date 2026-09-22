@@ -72,9 +72,9 @@ export default function ChatList() {
           <div key={c.id} className="card card-tab" style={{ marginBottom: 10, cursor: "pointer" }} onClick={() => navigate(`/coach/${c.id}`)}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <p style={{ fontWeight: 600 }}>{c.title}</p>
-              <button
+              <button className="button btn-ghost"
                 onClick={(e) => { e.stopPropagation(); setPendingDelete({ id: c.id, title: c.title }); }}
-                style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12 }}
+                style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 12 }}
               >
                 Delete
               </button>

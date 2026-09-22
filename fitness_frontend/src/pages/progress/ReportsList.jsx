@@ -222,9 +222,9 @@ export default function ReportsList() {
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <TriggeredByPill triggeredBy={r.triggered_by} />
               <StatusPill status={r.status} />
-              <button
+              <button className="button btn-ghost"
                 onClick={(e) => { e.stopPropagation(); setPendingDelete(r.id); }}
-                style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12 }}
+                style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 12 }}
               >
                 Delete
               </button>

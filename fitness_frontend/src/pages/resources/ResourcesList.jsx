@@ -46,12 +46,11 @@ export default function ResourcesList() {
     <div className="page">
       <PageHeader title="Resources" subtitle="Exercises, Food & Articles" />
 
-      <div style={{ display: "flex", gap: 6 }}>
+      <div className="tab-bar">
         {TABS.map(([value, label]) => (
           <button
             key={value}
-            className={tab === value ? "btn btn-primary" : "btn btn-secondary"}
-            style={{ flex: 1 }}
+            className={`tab-btn${tab === value ? " active" : ""}`}
             onClick={() => setTab(value)}
           >
             {label}
@@ -179,8 +178,8 @@ function ExerciseDetail({ exercise, onBack }) {
       <PageHeader
         title={exercise.name}
         subtitle={exercise.category || undefined}
-        back={false}
-        action={<button className="btn-ghost" style={{ background: "none", border: "none" }} onClick={onBack}>Back to Search</button>}
+        back
+        onBack={onBack}
       />
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {exercise.category && <span className="pill pill-chili">{exercise.category}</span>}
@@ -317,8 +316,8 @@ function FoodDetail({ food, onBack }) {
       <PageHeader
         title={food.name}
         subtitle={food.local_name || undefined}
-        back={false}
-        action={<button className="btn-ghost" style={{ background: "none", border: "none" }} onClick={onBack}>Back to Search</button>}
+        back
+        onBack={onBack}
       />
       <span className={`pill ${food.is_verified ? "pill-bamboo" : "pill-neutral"}`}>
         {food.is_verified ? "PhilFCT" : "Estimated"}
@@ -326,10 +325,10 @@ function FoodDetail({ food, onBack }) {
       <div className="card">
         <p className="eyebrow" style={{ marginBottom: 8 }}>Per {food.serving_description}</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, textAlign: "center" }}>
-          <MacroBox label="Calories" value={Math.round(food.calories)} />
-          <MacroBox label="Protein" value={`${Math.round(food.protein_g)}g`} />
-          <MacroBox label="Carbs" value={`${Math.round(food.carbs_g)}g`} />
-          <MacroBox label="Fat" value={`${Math.round(food.fat_g)}g`} />
+          <MacroBox label="Calories" value={Math.round(food.calories)} accent="chili" />
+          <MacroBox label="Protein" value={`${Math.round(food.protein_g)}g`} accent="bamboo" />
+          <MacroBox label="Carbs" value={`${Math.round(food.carbs_g)}g`} accent="turmeric" />
+          <MacroBox label="Fat" value={`${Math.round(food.fat_g)}g`} accent="ube" />
         </div>
       </div>
       {(food.fiber_g != null || food.sodium_mg != null) && (
@@ -343,10 +342,10 @@ function FoodDetail({ food, onBack }) {
   );
 }
 
-function MacroBox({ label, value }) {
+function MacroBox({ label, value, accent }) {
   return (
     <div style={{ background: "var(--bg-raised)", borderRadius: "var(--radius-sm)", padding: "10px 4px" }}>
-      <div className="stat" style={{ fontSize: 15 }}>{value}</div>
+      <div className="stat" style={{ fontSize: 15, color: accent ? `var(--${accent})` : "var(--text)" }}>{value}</div>
       <div className="eyebrow" style={{ marginTop: 4 }}>{label}</div>
     </div>
   );

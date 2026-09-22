@@ -71,14 +71,12 @@ export default function WeightChart({ logs, goalWeightKg, primaryGoal, unitSyste
         <text x={padding.left} y={height - 4} fontSize="9" fill="var(--text-faint)">{first.logged_at}</text>
         <text x={width - padding.right} y={height - 4} fontSize="9" fill="var(--text-faint)" textAnchor="end">{latest.logged_at}</text>
       </svg>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12, color: "var(--text-faint)" }}>
-        <span>Latest: <strong style={{ color: "var(--text)" }}>{formatWeight(latest.weight_kg, unitSystem)}</strong></span>
+      <div style={{ display: "flex", justifyContent: "center", marginTop: 8, fontSize: 12, color: "var(--text-faint)" }}>
         <span>
           Change: <strong style={{ color: changeColor }}>
             {changeDelta.value > 0 ? "+" : ""}{changeDelta.value} {changeDelta.unit}
           </strong>
         </span>
-        {goalWeightKg != null && <span>Goal: <strong style={{ color: "var(--turmeric)" }}>{formatWeight(goalWeightKg, unitSystem)}</strong></span>}
       </div>
     </div>
   );
