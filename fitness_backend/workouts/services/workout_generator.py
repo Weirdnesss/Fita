@@ -450,6 +450,19 @@ def generate_workout(user):
     count_per_category, target_sets = GOAL_PARAMS.get(goal, DEFAULT_GOAL_PARAMS)
     target_sets = min(target_sets, MAX_SETS)
 
+    # No two frequency tiers share a day-type (see SPLITS above), so a
+    # frequency change always makes every previously-generated template
+    # stale -- prune anything not in the new split rather than letting
+    # it linger as a dead "(Generated)" routine forever. Safe to do
+    # unconditionally (also on an unchanged frequency, where this is
+    # just a no-op): TemplateHistory snapshots template_title as a
+    # plain string with no FK to WorkoutTemplate, so past logged
+    # workouts are unaffected by deleting the template that generated
+    # them.
+    WorkoutTemplate.objects.filter(
+        user=user, is_generated=True
+    ).exclude(day_type__in=split).delete()
+
     existing_by_day_type = {
         t.day_type: t
         for t in WorkoutTemplate.objects.filter(
@@ -460,7 +473,7 @@ def generate_workout(user):
     templates = []
     for day_type in split:
         categories = DAY_TYPE_CATEGORIES[day_type]
-        title = {DAY_TYPE_LABELS[day_type]}
+        title = DAY_TYPE_LABELS[day_type]
         template = existing_by_day_type.get(day_type)
 
         if template is None:

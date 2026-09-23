@@ -1,5 +1,7 @@
 import { client } from "./client";
 
+export const REPORT_FAILURE_MESSAGE = "Couldn't generate your report. Try again shortly.";
+
 export async function listReports() {
   const { data } = await client.get("/progress/reports/");
   return data;

@@ -522,6 +522,71 @@ class GenerateWorkoutCooldownBypassTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
 
+class GenerateWorkoutFrequencyPruneTests(APITestCase):
+    """
+    Covers pruning: no two frequency tiers share a day-type, so a
+    frequency change should replace the old split's generated
+    templates, not accumulate alongside them.
+    """
+
+    def setUp(self):
+        self.user = Account.objects.create_user(email="a@test.com", password="pass12345")
+        self.profile = Profile.objects.create(
+            user=self.user, workout_frequency="3-4", workout_location="gym", primary_goal="gain_muscle",
+        )
+        self.client.force_authenticate(user=self.user)
+        _seed_exercise_pool()
+
+    def test_changing_frequency_deletes_old_split_templates(self):
+        # 3-4 split -> Upper, Lower
+        self.client.post("/workouts/generate/")
+        self.assertEqual(
+            set(WorkoutTemplate.objects.filter(user=self.user, is_generated=True).values_list("day_type", flat=True)),
+            {"upper", "lower"},
+        )
+
+        # 5-6 split -> Push, Pull, Legs (zero overlap with Upper/Lower)
+        self.profile.workout_frequency = "5-6"
+        self.profile.save()
+        self.client.post("/workouts/generate/")
+
+        self.assertEqual(
+            set(WorkoutTemplate.objects.filter(user=self.user, is_generated=True).values_list("day_type", flat=True)),
+            {"push", "pull", "legs"},
+        )
+
+    def test_pruned_templates_do_not_affect_logged_history(self):
+        """TemplateHistory snapshots template_title as a plain string --
+        deleting the template that generated a workout must not touch
+        history already logged against it."""
+        response = self.client.post("/workouts/generate/")
+        upper = next(t for t in response.data["templates"] if t["day_type"] == "upper")
+
+        TemplateHistory.objects.create(
+            user=self.user,
+            template_title=upper["title"],
+            started_at=timezone.now(),
+        )
+
+        self.profile.workout_frequency = "5-6"
+        self.profile.save()
+        self.client.post("/workouts/generate/")  # prunes the now-orphaned Upper template
+
+        self.assertFalse(WorkoutTemplate.objects.filter(user=self.user, day_type="upper").exists())
+        self.assertEqual(TemplateHistory.objects.filter(user=self.user, template_title=upper["title"]).count(), 1)
+
+    def test_own_non_generated_templates_are_never_pruned(self):
+        """Pruning only ever targets is_generated=True -- a user's own hand-built routine must survive any frequency change."""
+        WorkoutTemplate.objects.create(user=self.user, title="My Own Push Day", kind="main", is_generated=False)
+        self.client.post("/workouts/generate/")
+
+        self.profile.workout_frequency = "5-6"
+        self.profile.save()
+        self.client.post("/workouts/generate/")
+
+        self.assertTrue(WorkoutTemplate.objects.filter(user=self.user, title="My Own Push Day", is_generated=False).exists())
+
+
 class GenerateWorkoutMedicalConditionTests(APITestCase):
     def setUp(self):
         self.user = Account.objects.create_user(email="a@test.com", password="pass12345")

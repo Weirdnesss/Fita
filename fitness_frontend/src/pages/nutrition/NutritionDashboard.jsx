@@ -161,73 +161,129 @@ export default function NutritionDashboard() {
       <ErrorBanner message={error} />
 
       <div className="nutrition-content">
-      <div className="nutrition-date-nav" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div
+        className="nutrition-date-nav"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 16,
+          marginBottom: 16,
+        }}
+      >
+      <button
+        onClick={() => shiftDay(-1)}
+        disabled={isOldestDate}
+        className="btn-ghost"
+        aria-label="Previous day"
+        style={{
+          background: "var(--bg-raised)",
+          border: "1px solid var(--border-soft)",
+          borderRadius: 10,
+          width: 44,
+          height: 44,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 28,
+          lineHeight: 1,
+          padding: 0,
+          opacity: isOldestDate ? 0.3 : 1,
+          flexShrink: 0,
+        }}
+      >
+        ‹
+      </button>
+
+      <div style={{ textAlign: "center", flex: 1 }}>
+        <div
+          style={{
+            position: "relative",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            justifyContent: "center",
+            padding: "4px 8px",
+          }}
+        >
+          <input
+            type="date"
+            value={selectedDate}
+            min={accountStartDate}
+            max={toDateStr(new Date())}
+            onChange={(e) => {
+              if (e.target.value) {
+                setSelectedDate(e.target.value);
+              }
+            }}
+            aria-label="Select date"
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              opacity: 0,
+              cursor: "pointer",
+            }}
+          />
+
+          <span
+            style={{
+              fontWeight: 700,
+              fontSize: 16,
+              pointerEvents: "none",
+            }}
+          >
+            {formatDayLabel(selectedDate)}
+          </span>
+
+          <CalendarIcon />
+        </div>
+
+    {!isToday && (
+      <div>
         <button
-          onClick={() => shiftDay(-1)}
-          disabled={isOldestDate}
-          className="btn-ghost"
+          onClick={() => setSelectedDate(toDateStr(new Date()))}
           style={{
             background: "none",
             border: "none",
-            fontSize: 18,
-            padding: "4px 10px",
-            opacity: isOldestDate ? 0.3 : 1,
+            color: "var(--chili)",
+            fontSize: 12,
+            fontWeight: 600,
+            padding: "4px 8px",
+            cursor: "pointer",
           }}
         >
-          ‹
-        </button>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-            {/* Invisible but fully functional -- catches the tap/click and opens
-                the device's native date picker. Kept in the DOM (not display:none)
-                so it stays interactive; just visually hidden under the label below. */}
-            <input
-              type="date"
-              value={selectedDate}
-              min={accountStartDate}
-              max={toDateStr(new Date())}
-              onChange={(e) => {
-                if (e.target.value) {
-                  setSelectedDate(e.target.value);
-                }
-              }}
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                opacity: 0,
-                cursor: "pointer",
-              }}
-            />
-            {/* Visible label -- a custom icon here looks consistent on every
-                device, unlike the browser's own calendar-picker indicator,
-                which varies a lot (and on some Android/Chrome versions renders
-                as a bare chevron rather than a calendar glyph). */}
-            <span style={{ fontWeight: 600, fontSize: 14, pointerEvents: "none" }}>
-              {formatDayLabel(selectedDate)}
-            </span>
-            <CalendarIcon />
-          </div>
-
-          {!isToday && (
-            <button
-              onClick={() => setSelectedDate(toDateStr(new Date()))}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--chili)",
-                fontSize: 11,
-              }}
-            >
-              Back to Today
-            </button>
-          )}
-        </div>
-        <button onClick={() => shiftDay(1)} disabled={isToday} className="btn-ghost" style={{ background: "none", border: "none", fontSize: 18, padding: "4px 10px", opacity: isToday ? 0.3 : 1 }}>
-          ›
+          Back to Today
         </button>
       </div>
+    )}
+  </div>
+
+  <button
+    onClick={() => shiftDay(1)}
+    disabled={isToday}
+    className="btn-ghost"
+    aria-label="Next day"
+    style={{
+      background: "var(--bg-raised)",
+      border: "1px solid var(--border-soft)",
+      borderRadius: 10,
+      width: 44,
+      height: 44,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 28,
+      lineHeight: 1,
+      padding: 0,
+      opacity: isToday ? 0.3 : 1,
+      flexShrink: 0,
+    }}
+  >
+    ›
+  </button>
+</div>
       
       <div className="nutrition-top-section">
         <div className="card nutrition-summary-card" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
@@ -407,7 +463,13 @@ function formatDayLabel(dateStr) {
 
 function CalendarIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, pointerEvents: "none" }}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      style={{ flexShrink: 0, pointerEvents: "none" }}
+    >
       <rect x="3" y="4" width="18" height="18" rx="2" stroke="var(--text-faint)" strokeWidth="2" />
       <line x1="3" y1="9" x2="21" y2="9" stroke="var(--text-faint)" strokeWidth="2" />
       <line x1="8" y1="2" x2="8" y2="6" stroke="var(--text-faint)" strokeWidth="2" strokeLinecap="round" />

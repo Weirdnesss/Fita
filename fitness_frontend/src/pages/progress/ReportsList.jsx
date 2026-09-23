@@ -4,7 +4,7 @@ import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
-import { listReports, generateReport, deleteReport, getReportSettings } from "../../api/progress";
+import { listReports, generateReport, deleteReport, getReportSettings, REPORT_FAILURE_MESSAGE } from "../../api/progress";
 
 export default function ReportsList() {
   const navigate = useNavigate();
@@ -17,8 +17,12 @@ export default function ReportsList() {
   const [cooldown, setCooldown] = useState(0); // seconds remaining before another generate is allowed
   const [pendingDelete, setPendingDelete] = useState(null); // report id | null
   const autoTriedRef = useRef(false); // guard against double-firing (e.g. React StrictMode)
-  const [currentPage, setCurrentPage] = useState(1);
-  const reportsPerPage = 10;
+  const REPORTS_PAGE_SIZE = 6;
+  const [visibleCount, setVisibleCount] = useState(REPORTS_PAGE_SIZE);
+
+  const visibleReports = reports
+    ? reports.slice(0, visibleCount)
+    : [];
 
   useEffect(() => {
     load();
@@ -56,16 +60,6 @@ export default function ReportsList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
-  useEffect(() => {
-    if (reports && reports.length > 0) {
-      const totalPages = Math.ceil(reports.length / reportsPerPage);
-
-      if (currentPage > totalPages) {
-        setCurrentPage(totalPages);
-      }
-    }
-  }, [reports, currentPage]);
-
   function load() {
     listReports().then(setReports).catch((err) => setError(extractErrorMessage(err)));
   }
@@ -79,17 +73,18 @@ export default function ReportsList() {
     try {
       const report = await generateReport({ triggeredBy: "interval" });
       if (report.status === "failed") {
-        // Quiet failure -- the user didn't ask for this one, so don't
-        // interrupt them with an error banner over it.
+        // Still quiet -- no toast/banner, since the user didn't ask for
+        // this one -- but the list must still reflect it, or a failed
+        // interval report silently disappears until an unrelated reload.
         return;
       }
       showToast("New interval report generated", "success");
-      load();
-      refreshSettings();
     } catch {
       // Same reasoning -- fail silently for an automatic trigger.
     } finally {
       setAutoGenerating(false);
+      load();
+      refreshSettings();
     }
   }
 
@@ -101,7 +96,7 @@ export default function ReportsList() {
       // user's own settings (day_interval/report_type) when omitted.
       const report = await generateReport({ triggeredBy: "manual" });
       if (report.status === "failed") {
-        setError(report.generation_error || "Report generation failed.");
+        setError(report.generation_error || REPORT_FAILURE_MESSAGE);
       } else {
         showToast("Report generated", "success");
         navigate(`/progress/${report.id}`);
@@ -129,13 +124,6 @@ export default function ReportsList() {
       showToast(extractErrorMessage(err), "error");
     }
   }
-
-  const totalPages = reports ? Math.ceil(reports.length / reportsPerPage) : 0;
-
-  const startIndex = (currentPage - 1) * reportsPerPage;
-  const paginatedReports = reports
-    ? reports.slice(startIndex, startIndex + reportsPerPage)
-    : [];
 
   return (
     <div className="page">
@@ -175,42 +163,10 @@ export default function ReportsList() {
         </button>
       </div>
 
-            {reports && reports.length > reportsPerPage && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 12,
-            marginTop: 16,
-          }}
-        >
-          <button
-            className="btn btn-secondary"
-            onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-            disabled={currentPage === 1}
-          >
-            Previous
-          </button>
-
-          <span style={{ fontSize: 13, color: "var(--text-faint)" }}>
-            Page {currentPage} of {totalPages}
-          </span>
-
-          <button
-            className="btn btn-secondary"
-            onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-            disabled={currentPage === totalPages}
-          >
-            Next
-          </button>
-        </div>
-      )}
-
       {reports === null && <Loading />}
       {reports?.length === 0 && <EmptyState title="No reports yet" eyebrow="Generate your first one above" />}
         <div className="report-list-grid">
-          {paginatedReports.map((r) => (
+          {visibleReports.map((r) => (
             <div
               key={r.id}
               className="card card-tab"
@@ -222,7 +178,7 @@ export default function ReportsList() {
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <TriggeredByPill triggeredBy={r.triggered_by} />
               <StatusPill status={r.status} />
-              <button className="button btn-ghost"
+              <button className="btn-ghost"
                 onClick={(e) => { e.stopPropagation(); setPendingDelete(r.id); }}
                 style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 12 }}
               >
@@ -233,13 +189,29 @@ export default function ReportsList() {
           <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 6 }}>
             {r.period_start} - {r.period_end}
           </p>
-          {r.progress_summary && (
+          {r.progress_summary ? (
             <p style={{ fontSize: 13, color: "var(--text-dim)" }}>
               {r.progress_summary.slice(0, 120)}{r.progress_summary.length > 120 ? "..." : ""}
             </p>
-          )}
+          ) : r.status === "failed" ? (
+          <p style={{ fontSize: 13, color: "var(--chili)" }}>
+            {r.generation_error || REPORT_FAILURE_MESSAGE}
+          </p>
+          ) : null}
         </div>
-      ))}
+      ))}      
+      
+      {reports?.length > visibleCount && (
+        <button
+          className="btn btn-secondary"
+          style={{ width: "100%", marginTop: 4 }}
+          onClick={() =>
+            setVisibleCount((count) => count + REPORTS_PAGE_SIZE)
+          }
+        >
+          Load More ({reports.length - visibleCount} left)
+        </button>
+      )}
       </div>
 
       <ConfirmDialog
@@ -261,8 +233,8 @@ export default function ReportsList() {
 
 
 function StatusPill({ status }) {
+  if (status === "generated") return null; // the default/expected state doesn't need a badge
   const map = {
-    generated: "pill-bamboo",
     pending: "pill-turmeric",
     failed: "pill-chili",
   };
@@ -271,9 +243,10 @@ function StatusPill({ status }) {
 
 function TriggeredByPill({ triggeredBy }) {
   if (!triggeredBy) return null;
+  const isInterval = triggeredBy === "interval";
   return (
-    <span className="pill" style={{ background: "var(--bg-raised)", color: "var(--text-faint)" }}>
-      {triggeredBy === "interval" ? "Interval" : "Manual"}
+    <span className={`pill ${isInterval ? "pill-bamboo" : "pill-ube"}`}>
+      {isInterval ? "Interval" : "Manual"}
     </span>
   );
 }

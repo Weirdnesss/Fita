@@ -360,6 +360,11 @@ label {
   border: 1px solid var(--border);
 }
 
+.pill-ube {
+  background: var(--ube-tint);
+  color: var(--ube);
+}
+
 .switch {
   position: relative;
   display: inline-flex;
@@ -895,8 +900,23 @@ label {
      the sidebar rather than the full viewport. If .sidebar's width
      changes, this must change with it — not derived automatically. */
   .chat-composer {
-    max-width: 900px !important;
-    left: calc(50% + 120px) !important;
+    left: calc(240px + (100% - 240px) / 2) !important;
+    transform: translateX(-50%) !important;
+    bottom: 24px !important;
+
+    width: min(700px, calc(100% - 288px)) !important;
+    max-width: 700px !important;
+
+    border-radius: 16px;
+  }
+
+  .chat-composer input {
+    width: 100%;
+    max-width: 900px;
+  }
+
+  .chat-composer button {
+    flex-shrink: 0;
   }
 
   /* ---- Progress / profile ---- */

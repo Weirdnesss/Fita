@@ -7,6 +7,7 @@ import WeightChart from "./weight/WeightChart";
 import WeightHistoryList from "./weight/WeightHistoryList";
 import { formatWeight } from "../lib/profile";
 import { useToast } from "../context/ToastContext";
+import LogWeightForm from "./weight/LogWeightForm";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
@@ -67,22 +68,24 @@ export default function WeightProgress() {
       )}
 
       {mode === "log" && (
-        <QuickLogForm
-          unitSystem={unitSystem}
-          onDone={async () => {
-            await refreshUser();
-            await load(); // new entry needs to show up in the chart/history below immediately
-            showToast("Weight logged", "success");
+        <LogWeightForm
+          onLogged={async () => {
+            await load();
             setMode(null);
           }}
           onCancel={() => setMode(null)}
         />
       )}
+
       {mode === "goal" && (
         <QuickGoalForm
           currentGoal={currentGoal}
           unitSystem={unitSystem}
-          onDone={async () => { await refreshUser(); showToast("Goal weight updated", "success"); setMode(null); }}
+          onDone={async () => {
+            await refreshUser();
+            showToast("Goal weight updated", "success");
+            setMode(null);
+          }}
           onCancel={() => setMode(null)}
         />
       )}

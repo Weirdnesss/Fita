@@ -55,7 +55,7 @@ class DataCollectionService:
 
         lines = []
         for t in templates:
-            source = "AI-generated" if t.is_generated else "self-made"
+            source = "Generated" if t.is_generated else "self-made"
             exercises = t.exercises.order_by("order")
             lines.append(f"- \"{t.title}\" ({source}, {exercises.count()} exercises):")
             for ex in exercises:
