@@ -162,20 +162,13 @@ if not DEBUG:
 # Email: console locally, Brevo's HTTPS API in production
 # (Render's free tier blocks SMTP ports).
 
+
+
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Fitness Assistant <no-reply@example.com>")
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 if DEBUG:
-    MAILERS = {
-        "default": {
-            "BACKEND": "django.core.mail.backends.console.EmailBackend",
-        },
-    }
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 else:
-    MAILERS = {
-        "default": {
-            "BACKEND": "anymail.backends.brevo.EmailBackend",
-            "OPTIONS": {
-                "api_key": os.environ["BREVO_API_KEY"],
-            },
-        },
-    }
+    EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
+    ANYMAIL = {"BREVO_API_KEY": os.environ["BREVO_API_KEY"]}
