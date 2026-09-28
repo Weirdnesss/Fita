@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import VerifyEmailModal from "../../components/VerifyEmailModal";
 import { ErrorBanner, extractErrorMessage } from "../../components/Status";
 
 export default function Login() {
@@ -10,6 +11,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showVerify, setShowVerify] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -19,9 +21,26 @@ export default function Login() {
       await login({ email, password });
       navigate("/profile");
     } catch (err) {
-      setError(extractErrorMessage(err, "Couldn't sign in. Check your email and password."));
+      if (err?.response?.data?.code === "email_not_verified") {
+        // Signed up but never finished verifying: finish it right here.
+        setShowVerify(true);
+      } else {
+        setError(extractErrorMessage(err, "Couldn't sign in. Check your email and password."));
+      }
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  // Only unverified accounts get here, i.e. people who signed up but closed
+  // the modal, so they haven't done onboarding yet.
+  async function handleVerified() {
+    setShowVerify(false);
+    try {
+      await login({ email, password });
+      navigate("/onboarding");
+    } catch {
+      setError("Your email is verified, but we couldn't sign you in automatically. Try logging in again.");
     }
   }
 
@@ -54,6 +73,20 @@ export default function Login() {
           Don't have an account? <Link to="/signup" style={{ color: "var(--chili)", fontWeight: 600 }}>Sign up</Link>
         </p>
       </div>
+
+      {showVerify && (
+        <VerifyEmailModal
+          email={email}
+          password={password}
+          sendOnOpen
+          onVerified={handleVerified}
+          onEmailChanged={setEmail}
+          onClose={() => {
+            setShowVerify(false);
+            setError("Your email isn't verified yet. Log in again to get a new code.");
+          }}
+        />
+      )}
     </div>
   );
 }

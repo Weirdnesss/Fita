@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { register } from "../../api/accounts";
+import { clearTokens } from "../../api/client";
+import VerifyEmailModal from "../../components/VerifyEmailModal";
 import { ErrorBanner, extractErrorMessage } from "../../components/Status";
 
 export default function Signup() {
@@ -9,6 +11,7 @@ export default function Signup() {
   const navigate = useNavigate();
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showVerify, setShowVerify] = useState(false);
 
   const [form, setForm] = useState({
     firstName: "",
@@ -24,8 +27,8 @@ export default function Signup() {
     e.preventDefault();
     setError("");
     setSubmitting(true);
-    let registered = false;
     try {
+      clearTokens(); // a stale token from an old session shouldn't ride along
       await register({
         email: form.email,
         firstName: form.firstName,
@@ -33,20 +36,23 @@ export default function Signup() {
         password: form.password,
         confirmPassword: form.confirmPassword,
       });
-      registered = true;
-      // Log in immediately, then straight to onboarding to fill in the
-      // rest of the profile -- this account is fully created and usable
-      // from this point on, there's no "finishing" signup left to do.
-      await login({ email: form.email, password: form.password });
-      navigate("/onboarding");
+      setShowVerify(true);
     } catch (err) {
-      if (registered) {
-        setError("Your account was created, but we couldn't sign you in automatically. Please use the Log In page.");
-      } else {
-        setError(extractErrorMessage(err, "Couldn't create your account. Check your details."));
-      }
+      setError(extractErrorMessage(err, "Couldn't create your account. Check your details."));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  // Called by the modal once the code checks out. The password is still in
+  // this form's state, so we can log in right away and go to onboarding.
+  async function handleVerified() {
+    setShowVerify(false);
+    try {
+      await login({ email: form.email, password: form.password });
+      navigate("/onboarding");
+    } catch {
+      setError("Your email is verified, but we couldn't sign you in automatically. Please use the Log In page.");
     }
   }
 
@@ -92,6 +98,16 @@ export default function Signup() {
           </p>
         </form>
       </div>
+
+      {showVerify && (
+        <VerifyEmailModal
+          email={form.email}
+          password={form.password}
+          onVerified={handleVerified}
+          onEmailChanged={(newEmail) => setForm((f) => ({ ...f, email: newEmail }))}
+          onClose={() => setShowVerify(false)}
+        />
+      )}
     </div>
   );
 }

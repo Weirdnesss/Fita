@@ -1,5 +1,24 @@
 import { client, getTokens, setTokens, clearTokens } from "./client";
 
+export async function verifyEmail({ email, code }) {
+  const { data } = await client.post("/accounts/verify-email/", { email, code });
+  return data;
+}
+
+export async function resendVerification(email) {
+  const { data } = await client.post("/accounts/resend-verification/", { email });
+  return data;
+}
+
+export async function changeEmail({ email, password, newEmail }) {
+  const { data } = await client.post("/accounts/change-email/", {
+    email,
+    password,
+    new_email: newEmail,
+  });
+  return data;
+}
+
 export async function register({ email, firstName, lastName, password, confirmPassword }) {
   const { data } = await client.post("/accounts/register/", {
     email,

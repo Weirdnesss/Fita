@@ -1,3 +1,12 @@
+import logging
+
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -7,6 +16,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import Profile, WeightLog
 from .serializers import AccountSerializer, ProfileSerializer, RegisterSerializer, WeightLogSerializer
 from nutrition.services.goal_calculator import sync_calculated_goals
+from .emails import check_verification_code, send_verification_code
+
+logger = logging.getLogger(__name__)
+User = get_user_model()
 
 
 class RegisterView(generics.CreateAPIView):
@@ -15,6 +28,124 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
     serializer_class = RegisterSerializer
 
+    def create(self, request, *args, **kwargs):
+        # A previous signup attempt that never got verified would hold this
+        # email hostage (emails are unique). Nobody could have used that
+        # account, so it's safe to discard and start fresh.
+        email = (request.data.get("email") or "").strip()
+        if email:
+            User.objects.filter(email__iexact=email, email_verified=False).delete()
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        user = serializer.save()
+        try:
+            send_verification_code(user)
+        except Exception:
+            logger.exception("Verification email failed for user %s", user.pk)
+
+
+class VerifyEmailView(APIView):
+    """POST /accounts/verify-email/  {"email": "...", "code": "123456"}"""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip()
+        code = str(request.data.get("code") or "").strip()
+
+        user = User.objects.filter(email__iexact=email, email_verified=False).first()
+        if user is None:
+            return Response({"error": "Incorrect code."}, status=status.HTTP_400_BAD_REQUEST)
+
+        ok, error = check_verification_code(user, code)
+        if not ok:
+            return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.email_verified = True
+        user.verification_code_hash = ""
+        user.verification_code_expires = None
+        user.verification_attempts = 0
+        user.save(
+            update_fields=[
+                "email_verified",
+                "verification_code_hash",
+                "verification_code_expires",
+                "verification_attempts",
+            ]
+        )
+        return Response({"detail": "Email verified."})
+
+
+class ResendVerificationView(APIView):
+    """POST /accounts/resend-verification/  {"email": "..."}"""
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "email"
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip()
+        user = User.objects.filter(email__iexact=email, email_verified=False).first()
+        if user:
+            try:
+                send_verification_code(user)
+            except Exception:
+                logger.exception("Resend failed for user %s", user.pk)
+        return Response({"detail": "If that account needs verification, a new code was sent."})
+
+
+class ChangeEmailView(APIView):
+    """
+    POST /accounts/change-email/
+    {"email": "<current>", "password": "...", "new_email": "..."}
+    Only for accounts that haven't verified yet; the password proves it's
+    the person who just signed up.
+    """
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "email"
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip()
+        password = request.data.get("password") or ""
+        new_email = (request.data.get("new_email") or "").strip()
+
+        user = User.objects.filter(email__iexact=email, email_verified=False).first()
+        if user is None or not user.check_password(password):
+            return Response({"error": "Couldn't update that email."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            validate_email(new_email)
+        except DjangoValidationError:
+            return Response({"error": "Enter a valid email address."}, status=status.HTTP_400_BAD_REQUEST)
+
+        new_email = User.objects.normalize_email(new_email)
+        User.objects.filter(email__iexact=new_email, email_verified=False).exclude(pk=user.pk).delete()
+        if User.objects.filter(email__iexact=new_email).exclude(pk=user.pk).exists():
+            return Response({"error": "That email is already in use."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.email = new_email
+        user.save(update_fields=["email"])
+        try:
+            send_verification_code(user)
+        except Exception:
+            logger.exception("Code send failed after email change for user %s", user.pk)
+        return Response({"detail": "Code sent.", "email": user.email})
+
+class VerifiedTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        if not self.user.email_verified:
+            raise AuthenticationFailed(
+                {"code": "email_not_verified", "detail": "Please verify your email before logging in."}
+            )
+        return data
+
+
+class VerifiedTokenObtainPairView(TokenObtainPairView):
+    serializer_class = VerifiedTokenObtainPairSerializer
 
 class LogoutView(APIView):
     """

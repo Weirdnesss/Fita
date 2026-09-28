@@ -6,6 +6,8 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 import { listReports, generateReport, deleteReport, getReportSettings, REPORT_FAILURE_MESSAGE } from "../../api/progress";
 
+const REPORTS_PAGE_SIZE = 10;
+
 export default function ReportsList() {
   const navigate = useNavigate();
   const showToast = useToast();
@@ -17,12 +19,7 @@ export default function ReportsList() {
   const [cooldown, setCooldown] = useState(0); // seconds remaining before another generate is allowed
   const [pendingDelete, setPendingDelete] = useState(null); // report id | null
   const autoTriedRef = useRef(false); // guard against double-firing (e.g. React StrictMode)
-  const REPORTS_PAGE_SIZE = 6;
   const [visibleCount, setVisibleCount] = useState(REPORTS_PAGE_SIZE);
-
-  const visibleReports = reports
-    ? reports.slice(0, visibleCount)
-    : [];
 
   useEffect(() => {
     load();
@@ -125,6 +122,8 @@ export default function ReportsList() {
     }
   }
 
+  const visibleReports = reports ? reports.slice(0, visibleCount) : [];
+
   return (
     <div className="page">
       <PageHeader title="Progress Reports" subtitle="Generated Reports" />
@@ -165,54 +164,53 @@ export default function ReportsList() {
 
       {reports === null && <Loading />}
       {reports?.length === 0 && <EmptyState title="No reports yet" eyebrow="Generate your first one above" />}
-        <div className="report-list-grid">
-          {visibleReports.map((r) => (
-            <div
-              key={r.id}
-              className="card card-tab"
-              style={{ marginBottom: 10, cursor: "pointer" }}
-              onClick={() => navigate(`/progress/${r.id}`)}
-            >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <p style={{ fontWeight: 600 }}>Report #{r.report_number}</p>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <TriggeredByPill triggeredBy={r.triggered_by} />
-              <StatusPill status={r.status} />
-              <button className="btn-ghost"
-                onClick={(e) => { e.stopPropagation(); setPendingDelete(r.id); }}
-                style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 12 }}
-              >
-                Delete
-              </button>
+
+      <div className="report-list-grid">
+        {visibleReports.map((r) => (
+          <div
+            key={r.id}
+            className="card card-tab"
+            style={{ marginBottom: 10, cursor: "pointer" }}
+            onClick={() => navigate(`/progress/${r.id}`)}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <p style={{ fontWeight: 600 }}>Report #{r.report_number}</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <TriggeredByPill triggeredBy={r.triggered_by} />
+                <StatusPill status={r.status} />
+                <button
+                  className="btn-ghost"
+                  onClick={(e) => { e.stopPropagation(); setPendingDelete(r.id); }}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
-          </div>
-          <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 6 }}>
-            {r.period_start} - {r.period_end}
-          </p>
-          {r.progress_summary ? (
-            <p style={{ fontSize: 13, color: "var(--text-dim)" }}>
-              {r.progress_summary.slice(0, 120)}{r.progress_summary.length > 120 ? "..." : ""}
+            <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 6 }}>
+              {r.period_start} - {r.period_end}
             </p>
-          ) : r.status === "failed" ? (
-          <p style={{ fontSize: 13, color: "var(--chili)" }}>
-            {r.generation_error || REPORT_FAILURE_MESSAGE}
-          </p>
-          ) : null}
-        </div>
-      ))}      
-      
+            {r.progress_summary ? (
+              <p style={{ fontSize: 13, color: "var(--text-dim)" }}>
+                {r.progress_summary.slice(0, 120)}{r.progress_summary.length > 120 ? "..." : ""}
+              </p>
+            ) : r.status === "failed" ? (
+              <p style={{ fontSize: 13, color: "var(--chili)" }}>
+                {r.generation_error || REPORT_FAILURE_MESSAGE}
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
       {reports?.length > visibleCount && (
         <button
           className="btn btn-secondary"
           style={{ width: "100%", marginTop: 4 }}
-          onClick={() =>
-            setVisibleCount((count) => count + REPORTS_PAGE_SIZE)
-          }
+          onClick={() => setVisibleCount((c) => c + REPORTS_PAGE_SIZE)}
         >
           Load More ({reports.length - visibleCount} left)
         </button>
       )}
-      </div>
 
       <ConfirmDialog
         open={pendingDelete !== null}
@@ -229,8 +227,6 @@ export default function ReportsList() {
     </div>
   );
 }
-
-
 
 function StatusPill({ status }) {
   if (status === "generated") return null; // the default/expected state doesn't need a badge

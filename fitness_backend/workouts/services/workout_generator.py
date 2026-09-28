@@ -76,6 +76,44 @@ class WorkoutGenerationRateLimitedError(WorkoutGeneratorError):
 
 GENERATION_COOLDOWN = timedelta(days=7)
 
+
+def get_generation_eligibility(user):
+    """
+    Read-only check for whether generate_workout(user) would succeed
+    right now -- no row creation, no writes. Mirrors the cooldown/
+    bypass logic at the top of generate_workout() (kept as a separate,
+    intentionally duplicated ~10 lines rather than a shared helper, so
+    a change to one doesn't silently change the other's behavior).
+
+    Used by GenerationEligibilityView so the dashboard can show the
+    Generate button as disabled with a reason upfront, instead of the
+    user only finding out via a failed POST's 429.
+
+    Returns {"eligible": bool, "next_eligible_at": datetime | None}.
+    """
+    profile = getattr(user, "profile", None)
+    frequency = (profile.workout_frequency if profile else "") or WorkoutFrequency.THREE_TO_FOUR
+    location = (profile.workout_location if profile else "") or WorkoutLocation.GYM
+    goal = (profile.primary_goal if profile else "") or PrimaryGoal.MAINTAIN_WEIGHT
+
+    state = WorkoutGenerationState.objects.filter(user=user).first()
+    if state is None or state.last_generated_at is None:
+        return {"eligible": True, "next_eligible_at": None}
+
+    relevant_profile_changed = (
+        state.generated_for_frequency != frequency
+        or state.generated_for_location != location
+        or state.generated_for_goal != goal
+    )
+    if relevant_profile_changed:
+        return {"eligible": True, "next_eligible_at": None}
+
+    next_eligible_at = state.last_generated_at + GENERATION_COOLDOWN
+    if timezone.now() >= next_eligible_at:
+        return {"eligible": True, "next_eligible_at": None}
+
+    return {"eligible": False, "next_eligible_at": next_eligible_at}
+
 # How many of a day-type's most recent logged sessions to look at when
 # deciding whether it's stagnant. Fewer than this many sessions logged
 # means there isn't enough data to judge progress yet, so the existing

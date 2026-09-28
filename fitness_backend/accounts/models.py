@@ -36,6 +36,10 @@ class Account(AbstractUser):
 
     username = None
     email = models.EmailField(unique=True)
+    email_verified = models.BooleanField(default=False)
+    verification_code_hash = models.CharField(max_length=64, blank=True)
+    verification_code_expires = models.DateTimeField(null=True, blank=True)
+    verification_attempts = models.PositiveSmallIntegerField(default=0)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

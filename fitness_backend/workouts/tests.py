@@ -3,8 +3,17 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from datetime import timedelta
+
 from accounts.models import Profile
-from .models import PerformedExercise, TemplateExercise, TemplateHistory, WgerExercise, WorkoutTemplate
+from .models import (
+    PerformedExercise,
+    TemplateExercise,
+    TemplateHistory,
+    WgerExercise,
+    WorkoutGenerationState,
+    WorkoutTemplate,
+)
 
 Account = get_user_model()
 
@@ -520,6 +529,67 @@ class GenerateWorkoutCooldownBypassTests(APITestCase):
         self.client.post("/workouts/generate/")  # bypassed
         response = self.client.post("/workouts/generate/")  # should NOT bypass again
         self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+class GenerationEligibilityViewTests(APITestCase):
+    """
+    GET /workouts/generate/eligibility/ -- the read-only counterpart
+    the dashboard polls to decide whether to show Generate as enabled,
+    without needing a failed POST first.
+    """
+
+    def setUp(self):
+        self.user = Account.objects.create_user(email="a@test.com", password="pass12345")
+        self.profile = Profile.objects.create(
+            user=self.user, workout_frequency="3-4", workout_location="gym", primary_goal="gain_muscle",
+        )
+        self.client.force_authenticate(user=self.user)
+        _seed_exercise_pool()
+
+    def test_requires_auth(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get("/workouts/generate/eligibility/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_eligible_before_any_generation(self):
+        response = self.client.get("/workouts/generate/eligibility/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["eligible"])
+        self.assertIsNone(response.data["next_eligible_at"])
+
+    def test_not_eligible_right_after_generating(self):
+        self.client.post("/workouts/generate/")
+        response = self.client.get("/workouts/generate/eligibility/")
+        self.assertFalse(response.data["eligible"])
+        self.assertIsNotNone(response.data["next_eligible_at"])
+
+    def test_eligible_again_once_cooldown_elapses(self):
+        self.client.post("/workouts/generate/")
+        state = WorkoutGenerationState.objects.get(user=self.user)
+        state.last_generated_at = timezone.now() - timedelta(days=8)
+        state.save(update_fields=["last_generated_at"])
+
+        response = self.client.get("/workouts/generate/eligibility/")
+        self.assertTrue(response.data["eligible"])
+        self.assertIsNone(response.data["next_eligible_at"])
+
+    def test_eligible_again_when_relevant_profile_field_changes(self):
+        self.client.post("/workouts/generate/")
+        self.profile.workout_frequency = "5-6"
+        self.profile.save()
+
+        response = self.client.get("/workouts/generate/eligibility/")
+        self.assertTrue(response.data["eligible"])
+        self.assertIsNone(response.data["next_eligible_at"])
+
+    def test_still_ineligible_when_unrelated_field_changes(self):
+        """activity_level isn't read by the generator -- must not bypass eligibility either, matching the POST endpoint's own bypass rule."""
+        self.client.post("/workouts/generate/")
+        self.profile.activity_level = "very_active"
+        self.profile.save()
+
+        response = self.client.get("/workouts/generate/eligibility/")
+        self.assertFalse(response.data["eligible"])
 
 
 class GenerateWorkoutFrequencyPruneTests(APITestCase):

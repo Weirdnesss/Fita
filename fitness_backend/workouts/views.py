@@ -16,6 +16,7 @@ from .services.workout_generator import (
     WorkoutGenerationRateLimitedError,
     WorkoutGeneratorError,
     generate_workout,
+    get_generation_eligibility,
     get_medical_condition_note,
     swap_exercise,
 )
@@ -385,6 +386,25 @@ class GenerateWorkoutView(APIView):
         return Response({
             "templates": WorkoutTemplateSerializer(templates, many=True).data,
             "medical_note": get_medical_condition_note(getattr(request.user, "profile", None)),
+        })
+
+
+class GenerationEligibilityView(APIView):
+    """
+    GET /workouts/generate/eligibility/
+    Read-only counterpart to POST /workouts/generate/ -- lets the
+    dashboard show the Generate button as disabled with a reason
+    upfront, instead of the user only learning about the weekly
+    cooldown after a click fails with a 429.
+    Response: {"eligible": bool, "next_eligible_at": "..." | null}
+    """
+
+    def get(self, request):
+        eligibility = get_generation_eligibility(request.user)
+        next_eligible_at = eligibility["next_eligible_at"]
+        return Response({
+            "eligible": eligibility["eligible"],
+            "next_eligible_at": next_eligible_at.isoformat() if next_eligible_at else None,
         })
 
 

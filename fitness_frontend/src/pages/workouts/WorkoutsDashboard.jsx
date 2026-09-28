@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
-import { listTemplates, listHistory, deleteTemplate, generateWorkout } from "../../api/workouts";
+import { listTemplates, listHistory, deleteTemplate, generateWorkout, getGenerationEligibility } from "../../api/workouts";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 import WorkoutTrendsPanel from "./WorkoutTrendsPanel";
@@ -24,6 +24,7 @@ export default function WorkoutsDashboard() {
   const showToast = useToast();
   const [templates, setTemplates] = useState(null);
   const [history, setHistory] = useState(null);
+  const [eligibility, setEligibility] = useState(null); // { eligible, next_eligible_at } | null (unknown)
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null); // { id, title } | null
@@ -44,9 +45,18 @@ export default function WorkoutsDashboard() {
 
   async function load() {
     try {
-      const [t, h] = await Promise.all([listTemplates(), listHistory()]);
+      // Eligibility is a nice-to-have: if it fails, leave the button
+      // enabled (null = unknown) and let the 429 handler in
+      // handleGenerate catch a genuine cooldown, rather than failing
+      // the whole page load over it.
+      const [t, h, e] = await Promise.all([
+        listTemplates(),
+        listHistory(),
+        getGenerationEligibility().catch(() => null),
+      ]);
       setTemplates(t);
       setHistory(h);
+      setEligibility(e);
     } catch (err) {
       setError(extractErrorMessage(err));
     }
@@ -70,6 +80,7 @@ export default function WorkoutsDashboard() {
     } catch (err) {
       const nextEligible = err?.response?.data?.next_eligible_at;
       if (err?.response?.status === 429 && nextEligible) {
+        setEligibility({ eligible: false, next_eligible_at: nextEligible }); // sync the button with the server's answer (e.g. generated from another tab)
         setError(`Workouts can only be generated once a week. You can generate again on ${new Date(nextEligible).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}.`);
       } else {
         setError(extractErrorMessage(err, "Couldn't generate a workout."));
@@ -90,6 +101,8 @@ export default function WorkoutsDashboard() {
       showToast(extractErrorMessage(err), "error");
     }
   }
+
+  const generateLocked = eligibility?.eligible === false && !!eligibility.next_eligible_at;
 
   const ownCount = templates?.filter((r) => !r.is_generated).length ?? 0;
   const generatedCount = templates?.filter((r) => r.is_generated).length ?? 0;
@@ -120,14 +133,16 @@ export default function WorkoutsDashboard() {
         <div>
           <p style={{ fontWeight: 600 }}>New Routine</p>
           <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-            Generated plans use your goal, frequency, and location · once a week
+            {generateLocked
+              ? `Available again ${new Date(eligibility.next_eligible_at).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })} · or update your goal, frequency, or location to regenerate now`
+              : "Generated plans use your goal, frequency, and location · once a week"}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
           <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => navigate("/workouts/new")}>
             Build My Own
           </button>
-          <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleGenerate} disabled={generating}>
+          <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleGenerate} disabled={generating || generateLocked}>
             {generating ? "Generating..." : "Generate for Me"}
           </button>
         </div>
