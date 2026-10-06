@@ -5,6 +5,7 @@ from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from datetime import timedelta
 
 from .models import PerformedExercise, TemplateExercise, TemplateHistory, WeightUnit, WgerExercise, WorkoutTemplate
 from .serializers import (
@@ -13,7 +14,7 @@ from .serializers import (
     WorkoutTemplateSerializer,
 )
 from .services.workout_generator import (
-    WorkoutGenerationRateLimitedError,
+    WorkoutGenerationNotNeededError,
     WorkoutGeneratorError,
     generate_workout,
     get_generation_eligibility,
@@ -268,8 +269,8 @@ class TemplateExerciseDetailView(APIView):
         # Generated templates block edits in general (see
         # GENERATED_TEMPLATE_ERROR), but weight_unit is deliberately
         # exempted -- it's a per-session display preference, not a change
-        # to the routine itself, so it doesn't need to wait for the
-        # weekly regenerate cooldown like target_sets does.
+        # to the routine itself, so it stays editable on generated
+        # routines like target_sets is not.
         is_only_weight_unit = set(request.data.keys()) <= {"weight_unit"}
         if template.is_generated and not is_only_weight_unit:
             return Response(GENERATED_TEMPLATE_ERROR, status=status.HTTP_403_FORBIDDEN)
@@ -371,26 +372,21 @@ class WorkoutHistoryDetailView(generics.RetrieveAPIView):
 class GenerateWorkoutView(APIView):
     """
     POST /workouts/generate/
-    The "Generate Workout" dashboard button. Reads the user's Profile
-    (goal, workout frequency, workout location) and (re)generates
-    every day-type template in their split at once -- e.g. both Upper
-    and Lower together -- see workouts/services/workout_generator.py
-    for the actual rules, including the once-per-7-days cooldown (bypassed
-    if frequency/location/goal changed since the last generation), the
-    stagnation check that decides whether a day-type's exercises actually
-    get reshuffled, and the coarse medical-condition exercise exclusions.
+    The "Generate" dashboard button. Reads the user's Profile (goal,
+    workout frequency, workout location) and creates or updates every
+    day-type template in their split at once -- e.g. both Upper and
+    Lower together -- see workouts/services/workout_generator.py for the
+    actual rules. Generation only runs when it would change something:
+    the first time, after goal/frequency/location change, or when a
+    generated routine is missing. Otherwise it returns 409.
     Response: {"templates": [...], "medical_note": "..." | null}
-    A 429 response (rate limited) includes "next_eligible_at".
     """
 
     def post(self, request):
         try:
             templates = generate_workout(request.user)
-        except WorkoutGenerationRateLimitedError as e:
-            return Response(
-                {"error": str(e), "next_eligible_at": e.next_eligible_at.isoformat()},
-                status=status.HTTP_429_TOO_MANY_REQUESTS,
-            )
+        except WorkoutGenerationNotNeededError as e:
+            return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
         except WorkoutGeneratorError as e:
             return Response({"error": str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
         return Response({
@@ -398,33 +394,24 @@ class GenerateWorkoutView(APIView):
             "medical_note": get_medical_condition_note(getattr(request.user, "profile", None)),
         })
 
-
 class GenerationEligibilityView(APIView):
     """
     GET /workouts/generate/eligibility/
     Read-only counterpart to POST /workouts/generate/ -- lets the
-    dashboard show the Generate button as disabled with a reason
-    upfront, instead of the user only learning about the weekly
-    cooldown after a click fails with a 429.
-    Response: {"eligible": bool, "next_eligible_at": "..." | null}
+    dashboard show the Generate button's state upfront.
+    Response: {"eligible": bool,
+               "reason": "first" | "profile_changed" | "missing" | "up_to_date"}
     """
 
     def get(self, request):
-        eligibility = get_generation_eligibility(request.user)
-        next_eligible_at = eligibility["next_eligible_at"]
-        return Response({
-            "eligible": eligibility["eligible"],
-            "next_eligible_at": next_eligible_at.isoformat() if next_eligible_at else None,
-        })
-
+        return Response(get_generation_eligibility(request.user))
 
 class TemplateExerciseSwapView(APIView):
     """
     POST /workouts/templates/<template_id>/exercises/<exercise_id>/swap/
     Body: {"reason": "too_hard" | "unavailable" | "wrong"}
     Replaces this one exercise with a different candidate from the
-    same category, leaving the rest of the template (and the weekly
-    Generate cooldown) untouched. Available on generated templates
+    same category. Available on generated templates
     even though they otherwise block direct edits -- this is the
     intended way to fix a single bad pick without waiting a week or
     losing the rest of the routine.
@@ -485,7 +472,7 @@ class WorkoutTrendsView(APIView):
             )
 
         today = timezone.localdate()
-        start_date = today - timezone.timedelta(days=num_days - 1)
+        start_date = today - timedelta(days=num_days - 1)
 
         histories = (
             TemplateHistory.objects.filter(
@@ -510,7 +497,7 @@ class WorkoutTrendsView(APIView):
 
         days = []
         for i in range(num_days):
-            d = start_date + timezone.timedelta(days=i)
+            d = start_date + timedelta(days=i)
             b = by_date.get(d)
             days.append({
                 "date": d.isoformat(),
@@ -527,8 +514,8 @@ class WorkoutTrendsView(APIView):
             return round(sum(d[field] for d in logged_days) / days_logged, 1) if days_logged else 0
 
         total_volume = round(sum(d["volume"] for d in days), 1)
-        previous_start = start_date - timezone.timedelta(days=num_days)
-        previous_end = start_date - timezone.timedelta(days=1)
+        previous_start = start_date - timedelta(days=num_days)
+        previous_end = start_date - timedelta(days=1)
         previous_period_volume = round(self._total_volume(request.user, previous_start, previous_end), 1)
         volume_change_pct = (
             round((total_volume - previous_period_volume) / previous_period_volume * 100)
@@ -575,11 +562,11 @@ class WorkoutTrendsView(APIView):
             .values_list("day", flat=True)
             .distinct()
         )
-        cursor = today if today in logged_dates else today - timezone.timedelta(days=1)
+        cursor = today if today in logged_dates else today - timedelta(days=1)
         streak = 0
         while cursor in logged_dates:
             streak += 1
-            cursor -= timezone.timedelta(days=1)
+            cursor -= timedelta(days=1)
         return streak
 
 
@@ -639,7 +626,7 @@ class ExerciseProgressionView(APIView):
             .select_related("history")
         )
         if period != "all":
-            cutoff = timezone.localdate() - timezone.timedelta(days=self.PERIOD_DAYS[period] - 1)
+            cutoff = timezone.localdate() - timedelta(days=self.PERIOD_DAYS[period] - 1)
             performed = performed.filter(history__started_at__date__gte=cutoff)
 
         sessions_by_date = {}

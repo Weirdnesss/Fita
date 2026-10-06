@@ -19,6 +19,26 @@ const TEMPLATES_PAGE_SIZE = 6;
 // /workouts/history page did.
 const HISTORY_PAGE_SIZE = 10;
 
+// Button label + helper text for each reason the backend reports.
+const GENERATE_COPY = {
+  first: {
+    button: "Generate for Me",
+    hint: "Builds a plan from your goal, workout frequency, and location.",
+  },
+  profile_changed: {
+    button: "Update Routines",
+    hint: "Your goal, frequency, or location changed -- update your plan to match.",
+  },
+  missing: {
+    button: "Restore Routines",
+    hint: "Some of your generated routines are missing -- restore them.",
+  },
+  up_to_date: {
+    button: "Up to Date",
+    hint: "Your plan matches your profile. Change your goal, frequency, or location to get a new one, or swap single exercises inside a routine.",
+  },
+};
+
 export default function WorkoutsDashboard() {
   const navigate = useNavigate();
   const showToast = useToast();
@@ -67,24 +87,19 @@ export default function WorkoutsDashboard() {
     setError("");
     try {
       const result = await generateWorkout();
-      // Re-fetch rather than patch local state in place: one Generate
-      // call can create/replace multiple day-type routines at once
-      // (the whole split), so a full refresh is simplest to keep correct.
+      // Re-fetch rather than patch local state: one Generate call can
+      // create/update several day-type routines at once.
       await load();
-      // A toast alone isn't right for this -- it auto-dismisses in a
-      // couple seconds, and a medical/injury disclaimer needs to
-      // actually be read, not just glanced at. Shown as a persistent
-      // banner instead (below), which the user has to dismiss themselves.
+      // A medical/injury disclaimer needs to actually be read, so it's a
+      // persistent banner the user dismisses themselves, not a toast.
       setMedicalNote(result.medical_note || null);
-      showToast(hasGenerated ? "Workout routines regenerated" : "Workout routines generated", "success");
+      showToast(hasGenerated ? "Workout routines updated" : "Workout routines generated", "success");
     } catch (err) {
-      const nextEligible = err?.response?.data?.next_eligible_at;
-      if (err?.response?.status === 429 && nextEligible) {
-        setEligibility({ eligible: false, next_eligible_at: nextEligible }); // sync the button with the server's answer (e.g. generated from another tab)
-        setError(`Workouts can only be generated once a week. You can generate again on ${new Date(nextEligible).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}.`);
-      } else {
-        setError(extractErrorMessage(err, "Couldn't generate a workout."));
+      if (err?.response?.status === 409) {
+        // Server says nothing would change (e.g. generated from another tab).
+        setEligibility({ eligible: false, reason: "up_to_date" });
       }
+      setError(extractErrorMessage(err, "Couldn't generate a workout."));
     } finally {
       setGenerating(false);
     }
@@ -102,7 +117,8 @@ export default function WorkoutsDashboard() {
     }
   }
 
-  const generateLocked = eligibility?.eligible === false && !!eligibility.next_eligible_at;
+  const generateLocked = eligibility?.eligible === false;
+  const copy = GENERATE_COPY[eligibility?.reason] || GENERATE_COPY.first;
 
   const ownCount = templates?.filter((r) => !r.is_generated).length ?? 0;
   const generatedCount = templates?.filter((r) => r.is_generated).length ?? 0;
@@ -153,26 +169,20 @@ export default function WorkoutsDashboard() {
 
       {activeTab === "routines" && (
         <div>
-        <div className="card workout-actions-row" style={{ marginBottom: 20 }}>
-          <div>
-            <p style={{ fontWeight: 600 }}>New Routine</p>
-            <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-              {generateLocked
-                ? `Available again ${new Date(eligibility.next_eligible_at).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })} · or update your goal, frequency, or location to regenerate now`
-                : "Generated plans use your goal, frequency, and location · once a week"}
-            </p>
+          <div className="card workout-actions-row" style={{ marginBottom: 20 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p style={{ fontWeight: 600 }}>New Routine</p>
+              <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{copy.hint}</p>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+              <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => navigate("/workouts/new")}>
+                Build My Own
+              </button>
+              <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleGenerate} disabled={generating || generateLocked}>
+                {generating ? "Working..." : copy.button}
+              </button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-            <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => navigate("/workouts/new")}>
-              Build My Own
-            </button>
-            <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleGenerate} disabled={generating || generateLocked}>
-              {generating
-                ? (hasGenerated ? "Regenerating..." : "Generating...")
-                : (hasGenerated ? "Regenerate" : "Generate for Me")}
-            </button>
-          </div>
-        </div>
           {ownCount > 0 && generatedCount > 0 && (
             <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
               <FilterChip active={filter === "all"} label={`All (${templates.length})`} onClick={() => handleFilterChange("all")} />

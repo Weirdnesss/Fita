@@ -17,7 +17,7 @@ is exactly what a fixed formula gives you and an LLM does not.
     TDEE = BMR x activity multiplier (Sedentary 1.2 up to Very Active 1.725)
 
     Calorie target = TDEE, adjusted by goal:
-        lose_weight              TDEE - 500  (~0.5 kg/week deficit)
+        lose_weight              TDEE - 500, capped at 20% of TDEE  (~0.5 kg/week deficit)
         gain_weight / gain_muscle TDEE + 350  (lean surplus)
         build_strength / maintain TDEE
 
@@ -32,6 +32,7 @@ carbs fill the rest.
 """
 
 from dataclasses import dataclass
+from django.core.exceptions import ObjectDoesNotExist
 
 ACTIVITY_MULTIPLIERS = {
     "sedentary": 1.2,
@@ -75,6 +76,16 @@ FAT_PCT_OF_CALORIES = {
 }
 
 MIN_SAFE_CALORIES = {"male": 1500, "female": 1200}
+# A flat -500 kcal is ~30% of a small or sedentary person's TDEE, which is
+# aggressive for a beginner. Cap the deficit at a fraction of TDEE instead.
+MAX_DEFICIT_FRACTION = 0.20
+
+# Acceptable Macronutrient Distribution Range for protein is 10-35% of
+# calories. Capping here stops high g/kg targets from crowding out carbs.
+MAX_PROTEIN_CALORIE_FRACTION = 0.35
+
+# Mifflin-St Jeor is validated for adults.
+ADULT_MIN_AGE = 18
 DEFAULT_MIN_SAFE_CALORIES = 1350  # used for "other" / unspecified gender
 
 REQUIRED_FIELDS = ["current_weight_kg", "height_cm", "age", "gender"]
@@ -141,7 +152,24 @@ def calculate_goals(profile) -> GoalCalculationResult:
     goal = profile.primary_goal or "maintain_weight"
     if not profile.primary_goal:
         assumptions.append("No primary goal set -- assumed Maintain Weight.")
-    calories = tdee + GOAL_CALORIE_ADJUSTMENT[goal]
+
+    adjustment = GOAL_CALORIE_ADJUSTMENT[goal]
+    if age < ADULT_MIN_AGE:
+        assumptions.append(
+            "These formulas are designed for adults (18+) -- treat the numbers as a "
+            "rough guide and check with a doctor or dietitian."
+        )
+        if adjustment < 0:
+            adjustment = 0  # never apply an automatic deficit to a minor
+    elif adjustment < 0:
+        max_deficit = round(tdee * MAX_DEFICIT_FRACTION)
+        if max_deficit < -adjustment:
+            adjustment = -max_deficit
+            assumptions.append(
+                f"Calorie deficit limited to {max_deficit} kcal (20% of your daily "
+                "energy use) to keep it gentle."
+            )
+    calories = tdee + adjustment
 
     calorie_floor = MIN_SAFE_CALORIES.get(gender, DEFAULT_MIN_SAFE_CALORIES)
     calorie_floor_applied = calories < calorie_floor
@@ -152,6 +180,12 @@ def calculate_goals(profile) -> GoalCalculationResult:
         )
 
     protein_g = PROTEIN_G_PER_KG[goal] * weight_kg
+    max_protein_g = calories * MAX_PROTEIN_CALORIE_FRACTION / 4
+    if protein_g > max_protein_g:
+        protein_g = max_protein_g
+        assumptions.append(
+            "Protein was capped at 35% of your calories so there's still room for carbs and fat."
+        )
     protein_kcal = protein_g * 4
     fat_kcal = calories * FAT_PCT_OF_CALORIES[goal]
     fat_g = fat_kcal / 9
@@ -159,11 +193,6 @@ def calculate_goals(profile) -> GoalCalculationResult:
     carbs_kcal = max(carbs_kcal_raw, 0)
     carbs_g = carbs_kcal / 4
     if carbs_kcal_raw < 0:
-        # Protein + fat targets alone exceed the calorie target (can
-        # happen at high protein-per-kg goals combined with a low
-        # calorie target, e.g. high weight + short height + a capped
-        # deficit) -- surface this instead of silently zeroing carbs
-        # out with no explanation.
         assumptions.append(
             "Protein and fat targets left no room for carbs at this "
             "calorie level, so carbs were set to 0g."
@@ -209,7 +238,7 @@ def sync_calculated_goals(user):
 
     try:
         accounts_profile = user.profile
-    except Exception:
+    except ObjectDoesNotExist:
         return
 
     if missing_profile_fields(accounts_profile):
