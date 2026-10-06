@@ -17,6 +17,12 @@ const ARTICLE_CATEGORIES = [
   ["general", "General"],
 ];
 
+const ARTICLE_COLORS = {
+  workout: "var(--chili)",
+  nutrition: "var(--bamboo)",
+  general: "var(--turmeric)",
+};
+
 // Mirrors nutrition.models.FoodCategory on the backend -- duplicated
 // from FoodSearch.jsx since this is a separate read-only browsing
 // context (no "add to log" flow, so reusing that page directly didn't fit).
@@ -153,7 +159,12 @@ function ExercisesTab() {
       )}
       <div className="resource-results-grid">
         {results.map((ex) => (
-          <div key={ex.wger_exercise_id} className="card" style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => setSelected(ex)}>
+          <div
+            key={ex.wger_exercise_id}
+            className="card card-accent"
+            style={{ marginBottom: 8, cursor: "pointer", "--accent-color": "var(--chili)" }}
+            onClick={() => setSelected(ex)}
+          >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
             <p style={{ fontWeight: 600 }}>{ex.name}</p>
             {ex.category && <span className="pill pill-neutral" style={{ flexShrink: 0 }}>{ex.category}</span>}
@@ -282,7 +293,12 @@ function FoodTab() {
       )}
       <div className="resource-results-grid">
       {results.map((food) => (
-        <div key={food.id} className="card" style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => setSelected(food)}>
+        <div
+          key={food.id}
+          className="card card-accent"
+          style={{ marginBottom: 8, cursor: "pointer", "--accent-color": "var(--bamboo)" }}
+          onClick={() => setSelected(food)}
+        >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
             <div>
               <p style={{ fontWeight: 600 }}>{food.name}</p>
@@ -404,7 +420,13 @@ function ArticlesTab() {
           target="_blank"
           rel="noreferrer noopener"
           className="card card-tab"
-          style={{ marginBottom: 10, display: "block", textDecoration: "none", color: "inherit" }}
+          style={{
+            marginBottom: 10,
+            display: "block",
+            textDecoration: "none",
+            color: "inherit",
+            "--accent-color": ARTICLE_COLORS[r.category] || "var(--turmeric)",
+          }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
             <p style={{ fontWeight: 600 }}>{r.title}</p>

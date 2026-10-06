@@ -58,9 +58,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     def validate_date_of_birth(self, value):
         if value is None:
             return value
-        from datetime import date
 
-        today = date.today()
+        today = timezone.localdate()
         if value > today:
             raise serializers.ValidationError("Date of birth can't be in the future.")
         age_years = today.year - value.year - ((today.month, today.day) < (value.month, value.day))

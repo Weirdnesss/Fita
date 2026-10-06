@@ -5,6 +5,8 @@ import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../com
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 import { listReports, generateReport, deleteReport, getReportSettings, REPORT_FAILURE_MESSAGE } from "../../api/progress";
+import SettingsButton from "../../components/SettingsButton";
+import { nextReportInfo } from "../../lib/reports";
 
 const REPORTS_PAGE_SIZE = 10;
 
@@ -20,6 +22,8 @@ export default function ReportsList() {
   const [pendingDelete, setPendingDelete] = useState(null); // report id | null
   const autoTriedRef = useRef(false); // guard against double-firing (e.g. React StrictMode)
   const [visibleCount, setVisibleCount] = useState(REPORTS_PAGE_SIZE);
+  const noData = settings?.has_new_data === false;
+  const nextReport = nextReportInfo(settings);
 
   useEffect(() => {
     load();
@@ -122,11 +126,17 @@ export default function ReportsList() {
     }
   }
 
-  const visibleReports = reports ? reports.slice(0, visibleCount) : [];
+  const latest = reports?.find((r) => r.status === "generated");
+  const previous = reports ? reports.filter((r) => r !== latest) : [];
+  const visiblePrevious = previous.slice(0, visibleCount);
 
   return (
     <div className="page">
-      <PageHeader title="Progress Reports" subtitle="Generated Reports" />
+      <PageHeader
+        title="Progress Reports"
+        subtitle="Generated Reports"
+        action={<SettingsButton to="/progress/settings" label="Report settings" />}
+      />
       <ErrorBanner message={error} />
 
       {autoGenerating && (
@@ -144,71 +154,71 @@ export default function ReportsList() {
           </p>
         </div>
       )}
-      {settings?.due_status === "due_no_data" && (
+      {noData && (
         <div className="card card-tab" style={{ "--accent-color": "var(--border)" }}>
           <p style={{ fontSize: 13, color: "var(--text-faint)" }}>
-            You have no workout or food history logged -- it's not recommended to
-            generate a report right now.
+            Nothing logged in the last {settings.day_interval} days, so there's nothing to report on yet.
+            Log a workout or a meal to enable reports.
           </p>
         </div>
       )}
 
-      <div className="progress-actions" style={{ display: "flex", gap: 8 }}>
-        <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleGenerate} disabled={generating || cooldown > 0}>
-          {generating ? "Generating..." : cooldown > 0 ? `Wait ${cooldown}s` : "Generate New Report"}
-        </button>
-        <button className="btn btn-secondary" onClick={() => navigate("/progress/settings")}>
-          Settings
+      <div className="page-actions">
+        <button
+          className="btn btn-primary btn-block"
+          onClick={handleGenerate}
+          disabled={generating || autoGenerating || cooldown > 0 || noData}
+        >
+          {generating ? "Generating..." : cooldown > 0 ? `Try again in ${cooldown}s` : "Generate Report"}
         </button>
       </div>
+      {nextReport?.kind === "scheduled" && (
+        <p style={{ fontSize: 12, color: "var(--text-faint)", textAlign: "right" }}>
+          Next automatic report due {nextReport.text}
+        </p>
+      )}
 
       {reports === null && <Loading />}
       {reports?.length === 0 && <EmptyState title="No reports yet" eyebrow="Generate your first one above" />}
 
-      <div className="report-list-grid">
-        {visibleReports.map((r) => (
-          <div
-            key={r.id}
-            className="card card-tab"
-            style={{ marginBottom: 10, cursor: "pointer" }}
-            onClick={() => navigate(`/progress/${r.id}`)}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <p style={{ fontWeight: 600 }}>Report #{r.report_number}</p>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <TriggeredByPill triggeredBy={r.triggered_by} />
-                <StatusPill status={r.status} />
-                <button
-                  className="btn-ghost"
-                  onClick={(e) => { e.stopPropagation(); setPendingDelete(r.id); }}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-            <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 6 }}>
-              {r.period_start} - {r.period_end}
-            </p>
-            {r.progress_summary ? (
-              <p style={{ fontSize: 13, color: "var(--text-dim)" }}>
-                {r.progress_summary.slice(0, 120)}{r.progress_summary.length > 120 ? "..." : ""}
-              </p>
-            ) : r.status === "failed" ? (
-              <p style={{ fontSize: 13, color: "var(--chili)" }}>
-                {r.generation_error || REPORT_FAILURE_MESSAGE}
-              </p>
-            ) : null}
+      {latest && (
+        <>
+          <h3>Latest Report</h3>
+          <ReportCard
+            r={latest}
+            featured
+            onOpen={() => navigate(`/progress/${latest.id}`)}
+            onDelete={() => setPendingDelete(latest.id)}
+          />
+        </>
+      )}
+      {previous.length > 0 && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <h3>Previous Reports</h3>
+            <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{previous.length} reports</span>
           </div>
-        ))}
-      </div>
 
-      {reports?.length > visibleCount && (
+          <div className="report-list-grid">
+            {visiblePrevious.map((r) => (
+              <ReportCard
+                key={r.id}
+                r={r}
+                onOpen={() => navigate(`/progress/${r.id}`)}
+                onDelete={() => setPendingDelete(r.id)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {previous.length > visibleCount && (
         <button
           className="btn btn-secondary"
           style={{ width: "100%", marginTop: 4 }}
           onClick={() => setVisibleCount((c) => c + REPORTS_PAGE_SIZE)}
         >
-          Load More ({reports.length - visibleCount} left)
+          Load More ({previous.length - visibleCount} left)
         </button>
       )}
 
@@ -241,8 +251,50 @@ function TriggeredByPill({ triggeredBy }) {
   if (!triggeredBy) return null;
   const isInterval = triggeredBy === "interval";
   return (
-    <span className={`pill ${isInterval ? "pill-bamboo" : "pill-ube"}`}>
+    <span className={`pill ${isInterval ? "pill-ube" : "pill-bamboo"}`}>
       {isInterval ? "Interval" : "Manual"}
     </span>
+  );
+}
+
+function ReportCard({ r, onOpen, onDelete, featured = false }) {
+  const previewLength = featured ? 280 : 120;
+  return (
+    <div
+      className="card card-tab"
+      style={{
+        marginBottom: featured ? 0 : 10,
+        cursor: "pointer",
+        "--accent-color": r.triggered_by === "interval" ? "var(--ube)" : "var(--bamboo)",
+      }}
+      onClick={onOpen}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <p style={{ fontWeight: 600 }}>Report #{r.report_number}</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <TriggeredByPill triggeredBy={r.triggered_by} />
+          <StatusPill status={r.status} />
+          <button
+            className="btn-ghost"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+      <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 6 }}>
+        {r.period_start} - {r.period_end}
+      </p>
+      {r.progress_summary ? (
+        <p style={{ fontSize: 13, color: "var(--text-dim)" }}>
+          {r.progress_summary.slice(0, previewLength)}
+          {r.progress_summary.length > previewLength ? "..." : ""}
+        </p>
+      ) : r.status === "failed" ? (
+        <p style={{ fontSize: 13, color: "var(--chili)" }}>
+          {r.generation_error || REPORT_FAILURE_MESSAGE}
+        </p>
+      ) : null}
+    </div>
   );
 }

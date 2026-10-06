@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { updateProfile, logWeight, listWeightLogs } from "../api/accounts";
+import { updateProfile, listWeightLogs } from "../api/accounts";
 import { ErrorBanner, Loading, extractErrorMessage } from "./Status";
 import WeightField from "./WeightField";
 import WeightChart from "./weight/WeightChart";
@@ -8,8 +8,6 @@ import WeightHistoryList from "./weight/WeightHistoryList";
 import { formatWeight } from "../lib/profile";
 import { useToast } from "../context/ToastContext";
 import LogWeightForm from "./weight/LogWeightForm";
-
-const todayStr = () => new Date().toISOString().split("T")[0];
 
 // Embedded on the Profile page. Log/goal actions stay up top (the
 // quick path -- defaults to today, no date field), with Trend and
@@ -48,25 +46,26 @@ export default function WeightProgress() {
 
   return (
     <div className="card weight-progress-card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <h3>Weight</h3>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3>Weight</h3>
+        {mode === null && (
+          <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => setMode("log")}>
+            + Log Weight
+          </button>
+        )}
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
         <StatTile label="Current" value={currentWeight != null ? formatWeight(currentWeight, unitSystem) : "Not logged"} accent="bamboo" />
-        <StatTile label="Goal" value={currentGoal != null ? formatWeight(currentGoal, unitSystem) : "Not set"} accent="turmeric" />
+        <StatTile
+          label="Goal ›"
+          value={currentGoal != null ? formatWeight(currentGoal, unitSystem) : "Set goal"}
+          accent="turmeric"
+          onClick={() => setMode("goal")}
+        />
         <StatTile label="BMI" value={bmi ?? "--"} accent="ube" />
-      </div>
-
-      {mode === null && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <button className="btn btn-primary" style={{ padding: "10px 14px", fontSize: 13 }} onClick={() => setMode("log")}>
-            Log Weight
-          </button>
-          <button className="btn btn-secondary" style={{ padding: "10px 14px", fontSize: 13 }} onClick={() => setMode("goal")}>
-            {currentGoal != null ? "Change Goal" : "Set Goal"}
-          </button>
-        </div>
-      )}
-
+      </div>      
+      
       {mode === "log" && (
         <LogWeightForm
           onLogged={async () => {
@@ -120,68 +119,38 @@ export default function WeightProgress() {
           />
         )}
       </div>
+
     </div>
   );
 }
 
-function StatTile({ label, value, accent }) {
+function StatTile({ label, value, accent, onClick }) {
   return (
-    <div style={{ textAlign: "center", padding: "10px 4px", background: "var(--bg-raised)", borderRadius: "var(--radius-sm)" }}>
+    <div
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      style={{
+        textAlign: "center",
+        padding: "10px 4px",
+        background: "var(--bg-raised)",
+        borderRadius: "var(--radius-sm)",
+        cursor: onClick ? "pointer" : "default",
+      }}
+    >
       <div style={{ fontSize: 16, fontWeight: 700, color: accent ? `var(--${accent})` : "var(--text)" }}>{value}</div>
       <div className="eyebrow" style={{ marginTop: 4 }}>{label}</div>
     </div>
   );
 }
 
-function QuickLogForm({ unitSystem, onDone, onCancel }) {
-  const [weightKg, setWeightKg] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleSave() {
-    if (weightKg === "") return;
-    setSaving(true);
-    setError("");
-    try {
-      await logWeight({ weightKg: Number(weightKg), loggedAt: todayStr() });
-      await onDone();
-    } catch (err) {
-      setError(extractErrorMessage(err, "Couldn't log that weight."));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div>
-      <WeightField
-        autoFocus
-        label="Today's weight"
-        kg={weightKg}
-        onChange={setWeightKg}
-        placeholder="e.g. 78.5"
-        defaultUnit={unitSystem === "imperial" ? "lbs" : "kg"}
-        allowToggle={false}
-      />
-      <ErrorBanner message={error} />
-      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-        <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save"}
-        </button>
-        <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={onCancel} disabled={saving}>
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function QuickGoalForm({ currentGoal, unitSystem, onDone, onCancel }) {
   const [goalWeightKg, setGoalWeightKg] = useState(currentGoal ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleSave() {
+  async function handleSubmit(e) {
+    e.preventDefault();
     setSaving(true);
     setError("");
     try {
@@ -195,7 +164,18 @@ function QuickGoalForm({ currentGoal, unitSystem, onDone, onCancel }) {
   }
 
   return (
-    <div>
+    <form
+      onSubmit={handleSubmit}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        padding: 14,
+        background: "var(--bg-raised)",
+        border: "1px solid var(--border-soft)",
+        borderRadius: "var(--radius-md)",
+      }}
+    >
       <WeightField
         autoFocus
         label="Goal weight"
@@ -205,15 +185,34 @@ function QuickGoalForm({ currentGoal, unitSystem, onDone, onCancel }) {
         defaultUnit={unitSystem === "imperial" ? "lbs" : "kg"}
         allowToggle={false}
       />
+
+      {currentGoal != null && (
+        <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+          Clear the field and save to remove your goal.
+        </p>
+      )}
+
       <ErrorBanner message={error} />
-      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-        <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save"}
-        </button>
-        <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={onCancel} disabled={saving}>
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ padding: "8px 14px", fontSize: 13 }}
+          onClick={onCancel}
+          disabled={saving}
+        >
           Cancel
         </button>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          style={{ padding: "8px 18px", fontSize: 13 }}
+          disabled={saving}
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
       </div>
-    </div>
+    </form>
   );
 }

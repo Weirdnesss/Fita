@@ -41,6 +41,7 @@ export default function FoodSearch() {
   const logDate = location.state?.date; // undefined -> backend defaults to today
   const editingEntryId = location.state?.editingEntryId; // set when swapping a food on an existing entry
   const editingMealType = location.state?.editingMealType;
+  const presetMealType = location.state?.mealType; // set when arriving from an empty meal's "+ Add"
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState(null);
     const [results, setResults] = useState([]);
@@ -100,6 +101,7 @@ export default function FoodSearch() {
         logDate={logDate}
         editingEntryId={editingEntryId}
         editingMealType={editingMealType}
+        presetMealType={presetMealType}
         onBack={() => setSelected(null)}
         onLogged={() => navigate("/nutrition", { state: { date: logDate } })}
       />
@@ -133,7 +135,12 @@ export default function FoodSearch() {
       )}
       <div className="food-search-results-grid">
       {results.map((food) => (
-        <div key={food.id} className="card" style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => setSelected(food)}>
+        <div
+          key={food.id}
+          className="card card-accent"
+          style={{ marginBottom: 8, cursor: "pointer", "--accent-color": "var(--bamboo)" }}
+          onClick={() => setSelected(food)}
+        >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
             <div>
               <p style={{ fontWeight: 600 }}>{food.name}</p>
@@ -184,7 +191,7 @@ function VerifiedBadge({ isVerified }) {
   );
 }
 
-function FoodDetail({ food, logDate, editingEntryId, editingMealType, onBack, onLogged }) {
+function FoodDetail({ food, logDate, editingEntryId, editingMealType, presetMealType, onBack, onLogged }) {
   const showToast = useToast();
   // PhilFCT items are stored per-100g -- let people type grams directly
   // instead of doing "1.5 servings of 100g" math in their head. Estimated
@@ -192,7 +199,7 @@ function FoodDetail({ food, logDate, editingEntryId, editingMealType, onBack, on
   const isGramBased = food.serving_description === "100g";
 
   const [amount, setAmount] = useState(isGramBased ? 100 : 1);
-  const [mealType, setMealType] = useState(editingMealType || "breakfast");
+  const [mealType, setMealType] = useState(editingMealType || presetMealType || "breakfast");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -234,7 +241,7 @@ function FoodDetail({ food, logDate, editingEntryId, editingMealType, onBack, on
         onBack={onBack}
       />
 
-      {logDate && logDate !== new Date().toISOString().slice(0, 10) && (
+      {logDate && logDate !== localToday() && (
         <p style={{ fontSize: 12, color: "var(--turmeric)" }}>
           Logging to {new Date(logDate + "T00:00:00").toLocaleDateString(undefined, {
             weekday: "short",
@@ -248,10 +255,10 @@ function FoodDetail({ food, logDate, editingEntryId, editingMealType, onBack, on
 
       <div className="card">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, textAlign: "center" }}>
-          <MacroBox label="Calories" value={Math.round(food.calories * servings)} />
-          <MacroBox label="Protein" value={`${Math.round(food.protein_g * servings)}g`} />
-          <MacroBox label="Carbs" value={`${Math.round(food.carbs_g * servings)}g`} />
-          <MacroBox label="Fat" value={`${Math.round(food.fat_g * servings)}g`} />
+          <MacroBox label="Calories" value={Math.round(food.calories)} accent="chili" />
+          <MacroBox label="Protein" value={`${Math.round(food.protein_g)}g`} accent="bamboo" />
+          <MacroBox label="Carbs" value={`${Math.round(food.carbs_g)}g`} accent="turmeric" />
+          <MacroBox label="Fat" value={`${Math.round(food.fat_g)}g`} accent="ube" />
         </div>
       </div>
 
@@ -285,11 +292,16 @@ function FoodDetail({ food, logDate, editingEntryId, editingMealType, onBack, on
   );
 }
 
-function MacroBox({ label, value }) {
+function MacroBox({ label, value, accent }) {
   return (
     <div style={{ background: "var(--bg-raised)", borderRadius: "var(--radius-sm)", padding: "10px 4px" }}>
-      <div className="stat" style={{ fontSize: 15 }}>{value}</div>
+      <div className="stat" style={{ fontSize: 15, color: accent ? `var(--${accent})` : "var(--text)" }}>{value}</div>
       <div className="eyebrow" style={{ marginTop: 4 }}>{label}</div>
     </div>
   );
+}
+
+function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

@@ -4,10 +4,30 @@ import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { getTemplate, finishWorkout, lbToKg } from "../../api/workouts";
 import ConfirmDialog from "../../components/ConfirmDialog";
+import UnitToggle from "../../components/UnitToggle";
 import { useToast } from "../../context/ToastContext";
 
 function sessionKey(templateId) {
   return `active_workout_${templateId}`;
+}
+
+// Derived from lbToKg itself (rather than a separate hardcoded constant)
+// so both conversion directions always agree with whatever factor
+// api/workouts.lbToKg actually uses.
+const KG_PER_LB = lbToKg(1);
+
+function convertWeight(value, fromUnit, toUnit) {
+  if (fromUnit === toUnit) return value;
+  const converted = fromUnit === "lb" ? lbToKg(value) : value / KG_PER_LB;
+  return Math.round(converted * 10) / 10;
+}
+
+function formatElapsed(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
 export default function ActiveWorkout() {
@@ -18,11 +38,15 @@ export default function ActiveWorkout() {
 
   const [template, setTemplate] = useState(null);
   const [logs, setLogs] = useState({}); // exerciseId -> [{weight, reps, done}]
+  // exerciseId -> "kg" | "lb". Per-exercise so switching one exercise's
+  // input unit mid-workout doesn't affect any other exercise's rows.
+  const [weightUnits, setWeightUnits] = useState({});
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [finishing, setFinishing] = useState(false);
   const [pendingRemoveSet, setPendingRemoveSet] = useState(null); // { exId, setIndex, exerciseName } | null
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [elapsed, setElapsed] = useState(0); // seconds since startedAtRef.current
 
   useEffect(() => {
     getTemplate(id)
@@ -45,10 +69,14 @@ export default function ActiveWorkout() {
         // back later) doesn't wipe sets already logged for exercises
         // that are still there.
         const merged = {};
+        const mergedUnits = {};
         t.exercises.forEach((ex) => {
           merged[ex.id] = saved?.logs?.[ex.id]
             ? saved.logs[ex.id]
             : Array.from({ length: ex.target_sets }, () => ({ weight: "", reps: "", done: false }));
+          // Resume whatever unit was chosen mid-session, falling back to
+          // the template's own unit for this exercise otherwise.
+          mergedUnits[ex.id] = saved?.weightUnits?.[ex.id] || ex.weight_unit;
         });
 
         // If there was a saved session with actual logged data, but NONE
@@ -75,6 +103,7 @@ export default function ActiveWorkout() {
         }
 
         setLogs(merged);
+        setWeightUnits(mergedUnits);
         setNote(saved?.note || "");
         startedAtRef.current = saved?.startedAt || new Date().toISOString();
       })
@@ -91,20 +120,31 @@ export default function ActiveWorkout() {
       });
   }, [id]);
 
-  // Snapshot to sessionStorage on every change to logs or note, so a
-  // refresh, a backgrounded/locked phone, or navigating elsewhere and
-  // back doesn't lose logged sets (or the note) mid-workout.
+  // Snapshot to sessionStorage on every change to logs, note, or unit
+  // choice, so a refresh, a backgrounded/locked phone, or navigating
+  // elsewhere and back doesn't lose logged sets (or the note, or which
+  // unit each exercise was using) mid-workout.
   useEffect(() => {
     if (!template || !startedAtRef.current) return;
     try {
       sessionStorage.setItem(
         sessionKey(id),
-        JSON.stringify({ startedAt: startedAtRef.current, logs, note })
+        JSON.stringify({ startedAt: startedAtRef.current, logs, note, weightUnits })
       );
     } catch {
       // Storage full/unavailable -- non-fatal, just skip persisting this tick.
     }
-  }, [logs, note, template, id]);
+  }, [logs, note, weightUnits, template, id]);
+
+  // Live elapsed-time ticker, starting once the session's start time is known.
+  useEffect(() => {
+    if (!startedAtRef.current) return;
+    const startMs = new Date(startedAtRef.current).getTime();
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
+    tick();
+    const intervalId = setInterval(tick, 1000);
+    return () => clearInterval(intervalId);
+  }, [template]);
 
   function updateSet(exId, setIndex, field, value) {
     setLogs((prev) => {
@@ -149,6 +189,23 @@ export default function ActiveWorkout() {
     setPendingRemoveSet({ exId, setIndex, exerciseName });
   }
 
+  // Switches one exercise's input unit and converts any already-typed
+  // weight values so they still represent the same real weight (e.g.
+  // 100 kg becomes ~220.5 lb) instead of just relabeling the number.
+  function switchWeightUnit(exId, newUnit) {
+    const currentUnit = weightUnits[exId];
+    if (!currentUnit || currentUnit === newUnit) return;
+
+    setLogs((prev) => ({
+      ...prev,
+      [exId]: prev[exId].map((s) => ({
+        ...s,
+        weight: s.weight === "" ? "" : String(convertWeight(Number(s.weight), currentUnit, newUnit)),
+      })),
+    }));
+    setWeightUnits((prev) => ({ ...prev, [exId]: newUnit }));
+  }
+
   function doDiscardWorkout() {
     sessionStorage.removeItem(sessionKey(id));
     navigate("/workouts");
@@ -167,31 +224,34 @@ export default function ActiveWorkout() {
     setError("");
 
     const exercises = template.exercises
-      .map((ex) => ({
-        exercise_name: ex.exercise_name,
-        weight_unit: ex.weight_unit,
-        // Values are typed in the exercise's own unit (kg or lb), but
-        // storage is always kg for volume math and cross-unit display
-        // -- convert lb entries here. display_weight also keeps the
-        // exact number the user typed, so re-viewing history in the
-        // same unit shows precisely that value instead of a converted
-        // value that's picked up a tiny rounding error from the
-        // lb<->kg round trip.
-        // Sets are also filtered for valid, in-range numbers here --
-        // the number inputs' min= attributes don't actually stop
-        // someone from typing a negative value, and letting a bad
-        // value reach the backend means the whole Finish request gets
-        // rejected with a deeply nested validation error that's not
-        // worth trying to surface nicely; simpler to just never send it.
-        sets_data: logs[ex.id]
-          .filter((s) => s.done && s.weight !== "" && s.reps !== "")
-          .filter((s) => Number(s.weight) >= 0 && Number.isInteger(Number(s.reps)) && Number(s.reps) >= 1)
-          .map((s) => ({
-            weight: ex.weight_unit === "lb" ? lbToKg(Number(s.weight)) : Number(s.weight),
-            display_weight: Number(s.weight),
-            reps: Number(s.reps),
-          })),
-      }))
+      .map((ex) => {
+        const unit = weightUnits[ex.id] || ex.weight_unit;
+        return {
+          exercise_name: ex.exercise_name,
+          weight_unit: unit,
+          // Values are typed in whichever unit this exercise is currently
+          // set to (kg or lb), but storage is always kg for volume math
+          // and cross-unit display -- convert lb entries here.
+          // display_weight also keeps the exact number the user typed, so
+          // re-viewing history in the same unit shows precisely that
+          // value instead of a converted value that's picked up a tiny
+          // rounding error from the lb<->kg round trip.
+          // Sets are also filtered for valid, in-range numbers here --
+          // the number inputs' min= attributes don't actually stop
+          // someone from typing a negative value, and letting a bad
+          // value reach the backend means the whole Finish request gets
+          // rejected with a deeply nested validation error that's not
+          // worth trying to surface nicely; simpler to just never send it.
+          sets_data: logs[ex.id]
+            .filter((s) => s.done && s.weight !== "" && s.reps !== "")
+            .filter((s) => Number(s.weight) >= 0 && Number.isInteger(Number(s.reps)) && Number(s.reps) >= 1)
+            .map((s) => ({
+              weight: unit === "lb" ? lbToKg(Number(s.weight)) : Number(s.weight),
+              display_weight: Number(s.weight),
+              reps: Number(s.reps),
+            })),
+        };
+      })
       // Drop exercises with nothing logged -- an exercise that was on
       // the routine but never actually checked off any sets shouldn't
       // be saved.
@@ -238,7 +298,7 @@ export default function ActiveWorkout() {
         onBack={handleCancel}
         action={
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 13, background: "none", border: "1px solid var(--border)", color: "var(--text-dim)" }} onClick={handleCancel} disabled={finishing}>
+            <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleCancel} disabled={finishing}>
               Cancel
             </button>
             <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleFinish} disabled={finishing}>
@@ -247,80 +307,99 @@ export default function ActiveWorkout() {
           </div>
         }
       />
+
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <span className="pill pill-neutral stat" style={{ fontSize: 13 }}>
+          {formatElapsed(elapsed)}
+        </span>
+      </div>
+
       <ErrorBanner message={error} />
 
-      {template.exercises.map((ex) => (
-        <div key={ex.id} className="card">
-          <p style={{ fontWeight: 600, marginBottom: 2 }}>{ex.exercise_name}</p>
-          <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 12 }}>{ex.category_name}</p>
-
-          <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 32px 24px", gap: 8, fontSize: 11, color: "var(--text-faint)", marginBottom: 6 }}>
-            <span>#</span>
-            <span>Weight ({ex.weight_unit})</span>
-            <span>Reps</span>
-            <span></span>
-            <span></span>
-          </div>
-
-          {logs[ex.id]?.map((set, i) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 32px 24px", gap: 8, alignItems: "center", marginBottom: 8 }}>
-              <span className="stat" style={{ fontSize: 13, color: "var(--text-dim)" }}>{i + 1}</span>
-              <input type="number" min="0" step="any" value={set.weight} onChange={(e) => updateSet(ex.id, i, "weight", e.target.value)} placeholder="0" style={{ padding: "8px 10px" }} />
-              <input type="number" min="1" step="1" value={set.reps} onChange={(e) => updateSet(ex.id, i, "reps", e.target.value)} placeholder="0" style={{ padding: "8px 10px" }} />
-              <button
-                onClick={() => toggleDone(ex.id, i)}
-                aria-label="Mark set done"
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  border: "1px solid var(--border)",
-                  background: set.done ? "var(--bamboo)" : "transparent",
-                  color: set.done ? "#fff" : "var(--text-faint)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                ✓
-              </button>
-              <button
-                onClick={() => removeSet(ex.id, i)}
-                aria-label="Remove set"
-                disabled={logs[ex.id].length <= 1}
-                style={{
-                  width: 24,
-                  height: 24,
-                  border: "none",
-                  background: "none",
-                  color: logs[ex.id].length <= 1 ? "var(--text-faint)" : "var(--chili)",
-                  fontSize: 16,
-                  lineHeight: 1,
-                }}
-              >
-                ×
-              </button>
+      {template.exercises.map((ex) => {
+        const unit = weightUnits[ex.id] || ex.weight_unit;
+        return (
+          <div key={ex.id} className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 2 }}>
+              <div>
+                <p style={{ fontWeight: 600, marginBottom: 2 }}>{ex.exercise_name}</p>
+                <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{ex.category_name}</p>
+              </div>
+              <UnitToggle
+                options={[{ value: "kg", label: "kg" }, { value: "lb", label: "lb" }]}
+                value={unit}
+                onChange={(v) => switchWeightUnit(ex.id, v)}
+              />
             </div>
-          ))}
 
-          <button
-            className="btn-ghost"
-            onClick={() => addSet(ex.id)}
-            style={{
-              width: "100%",
-              padding: "8px",
-              marginTop: 4,
-              border: "1px dashed var(--border)",
-              borderRadius: 8,
-              background: "none",
-              color: "var(--text-dim)",
-              fontSize: 13,
-            }}
-          >
-            + Add Set
-          </button>
-        </div>
-      ))}
+            <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 32px 24px", gap: 8, fontSize: 11, color: "var(--text-faint)", margin: "12px 0 6px" }}>
+              <span>#</span>
+              <span>Weight ({unit})</span>
+              <span>Reps</span>
+              <span></span>
+              <span></span>
+            </div>
+
+            {logs[ex.id]?.map((set, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 32px 24px", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                <span className="stat" style={{ fontSize: 13, color: "var(--text-dim)" }}>{i + 1}</span>
+                <input type="number" min="0" step="any" value={set.weight} onChange={(e) => updateSet(ex.id, i, "weight", e.target.value)} placeholder="0" style={{ padding: "8px 10px" }} />
+                <input type="number" min="1" step="1" value={set.reps} onChange={(e) => updateSet(ex.id, i, "reps", e.target.value)} placeholder="0" style={{ padding: "8px 10px" }} />
+                <button
+                  onClick={() => toggleDone(ex.id, i)}
+                  aria-label="Mark set done"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    background: set.done ? "var(--bamboo)" : "transparent",
+                    color: set.done ? "#fff" : "var(--text-faint)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  ✓
+                </button>
+                <button
+                  onClick={() => removeSet(ex.id, i)}
+                  aria-label="Remove set"
+                  disabled={logs[ex.id].length <= 1}
+                  style={{
+                    width: 24,
+                    height: 24,
+                    border: "none",
+                    background: "none",
+                    color: logs[ex.id].length <= 1 ? "var(--text-faint)" : "var(--chili)",
+                    fontSize: 16,
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+
+            <button
+              className="btn-ghost"
+              onClick={() => addSet(ex.id)}
+              style={{
+                width: "100%",
+                padding: "8px",
+                marginTop: 4,
+                border: "1px dashed var(--border)",
+                borderRadius: 8,
+                background: "none",
+                color: "var(--text-dim)",
+                fontSize: 13,
+              }}
+            >
+              + Add Set
+            </button>
+          </div>
+        );
+      })}
 
       <div className="card">
         <label htmlFor="workout-note" style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 8 }}>

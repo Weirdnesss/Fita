@@ -13,7 +13,9 @@ export default function ReportSettings() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    getReportSettings().then(setSettings).catch((err) => setError(extractErrorMessage(err)));
+    getReportSettings()
+      .then((s) => setSettings({ ...s, day_interval: Math.min(30, s.day_interval) }))
+      .catch((err) => setError(extractErrorMessage(err)));
   }, []);
 
   async function handleSave() {
@@ -69,8 +71,8 @@ export default function ReportSettings() {
             <button
               className="btn btn-secondary"
               style={{ width: 40, height: 40, padding: 0 }}
-              onClick={() => setSettings((s) => ({ ...s, day_interval: Math.min(90, s.day_interval + 1) }))}
-              disabled={settings.day_interval >= 90}
+              onClick={() => setSettings((s) => ({ ...s, day_interval: Math.min(30, s.day_interval + 1) }))}
+              disabled={settings.day_interval >= 30}
             >
               +
             </button>

@@ -10,7 +10,7 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import ProgressReport, ProgressReportSettings, ReportStatus
+from .models import MIN_DAY_INTERVAL, ProgressReport, ProgressReportSettings, ReportStatus, MAX_DAY_INTERVAL, MIN_DAY_INTERVAL
 from .serializers import (
     GenerateReportSerializer,
     ProgressReportDetailSerializer,
@@ -100,6 +100,13 @@ class GenerateReportView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        requested_days = data.get("period_days")
+        if requested_days and not (MIN_DAY_INTERVAL <= requested_days <= MAX_DAY_INTERVAL):
+            return Response(
+                {"error": f"Report period must be between {MIN_DAY_INTERVAL} and {MAX_DAY_INTERVAL} days."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Ensure the row exists first (plain get_or_create, no lock needed
         # for that part -- it's only the check-and-set below that's racy).
         ProgressReportSettings.objects.get_or_create(user=request.user)
@@ -122,6 +129,22 @@ class GenerateReportView(APIView):
                 if data["triggered_by"] == "interval" and not settings_obj.is_enabled:
                     return Response(
                         {"error": "Interval-based generation is turned off in report settings."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                # No data to report on: refuse before any row is created, so the
+                # list isn't cluttered with "Insufficient data" failures. Only
+                # checked when the request doesn't override period_days, because
+                # has_new_data() looks at the saved day_interval window.
+                if not data.get("period_days") and not settings_obj.has_new_data():
+                    return Response(
+                        {
+                            "error": (
+                                f"Nothing logged in the last {settings_obj.day_interval} days, "
+                                "so there's nothing to report on yet. "
+                                "Log a workout or a meal first."
+                            )
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 

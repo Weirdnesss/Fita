@@ -3,6 +3,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import RequireAuth from "./components/RequireAuth";
 import AppLayout from "./components/AppLayout";
+import "./lib/pwaInstall";
 
 import Login from "./pages/auth/Login";
 import Signup from "./pages/auth/Signup";
@@ -18,7 +19,6 @@ import HistoryDetail from "./pages/workouts/HistoryDetail";
 import NutritionDashboard from "./pages/nutrition/NutritionDashboard";
 import FoodSearch from "./pages/nutrition/FoodSearch";
 import NutritionSettings from "./pages/nutrition/NutritionSettings";
-import NutritionTrends from "./pages/nutrition/NutritionTrends";
 
 import ChatList from "./pages/coach/ChatList";
 import ChatDetail from "./pages/coach/ChatDetail";
@@ -63,7 +63,6 @@ export default function App() {
               <Route path="/nutrition" element={<NutritionDashboard />} />
               <Route path="/nutrition/search" element={<FoodSearch />} />
               <Route path="/nutrition/settings" element={<NutritionSettings />} />
-              <Route path="/nutrition/trends" element={<NutritionTrends />} />
 
               <Route path="/coach" element={<ChatList />} />
               <Route path="/coach/:id" element={<ChatDetail />} />

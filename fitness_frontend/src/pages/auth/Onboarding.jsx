@@ -6,6 +6,7 @@ import HeightField from "../../components/HeightField";
 import WeightField from "../../components/WeightField";
 import UnitToggle from "../../components/UnitToggle";
 import { ErrorBanner, extractErrorMessage } from "../../components/Status";
+import DatePicker from "../../components/DatePicker";
 
 const GENDERS = [
   ["male", "Male"],
@@ -44,9 +45,18 @@ const LOCATIONS = [
 const TUTORIAL_ITEMS = [
   ["Workouts", "Follow generated routines or build your own, then track sets as you go."],
   ["Nutrition", "Log meals and keep an eye on calories and macros against your goal."],
-  ["Coach", "Ask questions and get guidance based on your own logged data."],
+  ["Assistant", "Ask questions and get guidance based on your own logged data."],
   ["Progress", "Weight trends and periodic reports so you can see what's working."],
 ];
+
+// Local calendar date as YYYY-MM-DD. Not toISOString() -- that's UTC,
+// which reads as yesterday in the Philippines before 8 AM local.
+function todayStr() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 
 function initialFormFrom(profile) {
   return {
@@ -155,8 +165,13 @@ export default function Onboarding() {
                 </select>
               </div>
               <div>
-                <label>Date of birth</label>
-                <input type="date" required max={new Date().toISOString().split("T")[0]} value={form.dateOfBirth} onChange={set("dateOfBirth")} />
+                <DatePicker
+                  label="Date of birth"
+                  required
+                  value={form.dateOfBirth}
+                  onChange={(v) => setForm((f) => ({ ...f, dateOfBirth: v }))}
+                  max={todayStr()}
+                />
               </div>
             </div>
 

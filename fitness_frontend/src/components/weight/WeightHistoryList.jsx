@@ -9,11 +9,13 @@ import { useToast } from "../../context/ToastContext";
 
 const PAGE_SIZE = 10;
 
-// `limit`: cap how many entries show, with a link to the full history
-// page for the rest (used on the embedded Profile card). Omit it for
-// the dedicated /profile/weight page, which instead paginates via
-// Load More rather than showing everything at once or linking anywhere
-// (there's nowhere further to link to -- this already is the full-history page).
+function formatLogDate(dateStr) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString();
+}
+
+// `limit`: compact rows capped at N with a link to the full history page
+// (used on the embedded Profile card). Without it, entries render as
+// cards with Load More pagination (the dedicated /profile/weight page).
 export default function WeightHistoryList({ logs, unitSystem, limit, onDeleted, heading }) {
   const { refreshUser } = useAuth();
   const showToast = useToast();
@@ -29,7 +31,7 @@ export default function WeightHistoryList({ logs, unitSystem, limit, onDeleted, 
     try {
       await deleteWeightLog(id);
       await refreshUser();
-      showToast(`Removed ${formatWeight(weightKg, unitSystem)} entry`, "success");
+      showToast(`Deleted ${formatWeight(weightKg, unitSystem)} entry`, "success");
       onDeleted?.();
     } catch (err) {
       showToast(extractErrorMessage(err, "Couldn't delete that entry."), "error");
@@ -38,9 +40,61 @@ export default function WeightHistoryList({ logs, unitSystem, limit, onDeleted, 
     }
   }
 
+  const asCards = false;
   const visible = limit ? logs?.slice(0, limit) : logs?.slice(0, visibleCount);
   const hasMoreLink = limit && logs && logs.length > limit;
   const hasMoreToLoad = !limit && logs && logs.length > visibleCount;
+
+  function renderCard(entry) {
+    return (
+      <div
+        key={entry.id}
+        className="card card-accent"
+        style={{
+          marginBottom: 10,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          "--accent-color": "var(--bamboo)",
+        }}
+      >
+        <div>
+          <p className="stat" style={{ fontSize: 16 }}>{formatWeight(entry.weight_kg, unitSystem)}</p>
+          <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{formatLogDate(entry.logged_at)}</p>
+        </div>
+        <button
+          className="btn-ghost"
+          style={{ fontSize: 12 }}
+          onClick={() => setPendingDelete({ id: entry.id, weightKg: entry.weight_kg })}
+          disabled={deletingId === entry.id}
+        >
+          {deletingId === entry.id ? "Deleting..." : "Delete"}
+        </button>
+      </div>
+    );
+  }
+
+  function renderRow(entry) {
+    return (
+      <div
+        key={entry.id}
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}
+      >
+        <div>
+          <p style={{ fontWeight: 600, fontSize: 14 }}>{formatWeight(entry.weight_kg, unitSystem)}</p>
+          <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{formatLogDate(entry.logged_at)}</p>
+        </div>
+        <button
+          className="btn-ghost"
+          style={{ fontSize: 12, padding: 6 }}
+          onClick={() => setPendingDelete({ id: entry.id, weightKg: entry.weight_kg })}
+          disabled={deletingId === entry.id}
+        >
+          {deletingId === entry.id ? "Deleting..." : "Delete"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -48,26 +102,15 @@ export default function WeightHistoryList({ logs, unitSystem, limit, onDeleted, 
       {logs !== null && logs.length === 0 && (
         <p style={{ fontSize: 13, color: "var(--text-faint)" }}>No entries yet -- log your first weight above.</p>
       )}
-      {visible?.map((entry) => (
-        <div key={entry.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-          <div>
-            <p style={{ fontWeight: 600, fontSize: 14 }}>{formatWeight(entry.weight_kg, unitSystem)}</p>
-            <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{entry.logged_at}</p>
-          </div>
-          <button
-            className="btn-ghost"
-            style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 12, padding: 6 }}
-            onClick={() => setPendingDelete({ id: entry.id, weightKg: entry.weight_kg })}
-            disabled={deletingId === entry.id}
-          >
-            {deletingId === entry.id ? "Removing..." : "Remove"}
-          </button>
-        </div>
-      ))}
+
+      <div className={asCards ? "weight-history-grid" : undefined}>
+        {visible?.map((entry) => (asCards ? renderCard(entry) : renderRow(entry)))}
+      </div>
+
       {hasMoreLink && (
         <button
           className="btn-ghost"
-          style={{ background: "none", border: "none", padding: "10px 0 0", fontSize: 13, color: "var(--chili)", fontWeight: 600 }}
+          style={{ padding: "10px 0 0", fontSize: 13, fontWeight: 600 }}
           onClick={() => navigate("/profile/weight")}
         >
           View full history ({logs.length}) &rarr;
@@ -85,9 +128,9 @@ export default function WeightHistoryList({ logs, unitSystem, limit, onDeleted, 
 
       <ConfirmDialog
         open={pendingDelete !== null}
-        title="Remove entry"
-        message={pendingDelete ? `Remove the ${formatWeight(pendingDelete.weightKg, unitSystem)} entry? This can't be undone.` : ""}
-        confirmLabel="Remove"
+        title="Delete entry"
+        message={pendingDelete ? `Delete the ${formatWeight(pendingDelete.weightKg, unitSystem)} entry? This can't be undone.` : ""}
+        confirmLabel="Delete"
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
       />

@@ -6,6 +6,8 @@ import { createTemplate, getTemplate, updateTemplate, addExerciseToTemplate, rem
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 
+const MAX_TARGET_SETS = 10;
+
 export default function TemplateEditor() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -72,7 +74,7 @@ export default function TemplateEditor() {
   }
 
   async function handleTargetSetsChange(exerciseId, newTargetSets) {
-    if (newTargetSets < 1) return;
+    if (newTargetSets < 1 || newTargetSets > MAX_TARGET_SETS) return;
     // Optimistic update so the stepper feels instant.
     setTemplate((prev) => ({
       ...prev,
@@ -211,6 +213,7 @@ export default function TemplateEditor() {
             swapping={swappingId === ex.id}
             onToggle={() => setSwapTargetId(swapTargetId === ex.id ? null : ex.id)}
             onSwap={(reason) => handleSwapExercise(ex.id, reason)}
+            onWeightUnitChange={(unit) => handleWeightUnitChange(ex.id, unit)}
           />
         ))}
       </div>
@@ -252,7 +255,7 @@ export default function TemplateEditor() {
           </div>
         )}
         {template.exercises.map((ex) => (
-          <div key={ex.id} className="card" style={{ marginBottom: 10 }}>
+          <div key={ex.id} className="card card-accent" style={{ marginBottom: 10, "--accent-color": "var(--chili)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
                 <p style={{ fontWeight: 600 }}>{ex.exercise_name}</p>
@@ -262,8 +265,9 @@ export default function TemplateEditor() {
               </div>
               <button
                 className="btn-ghost"
-                style={{ background: "none", border: "none", color: "var(--chili)", fontSize: 12 }}
-                onClick={() => setPendingRemove({ id: ex.id, name: ex.exercise_name })}              >
+                style={{ fontSize: 12 }}
+                onClick={() => setPendingRemove({ id: ex.id, name: ex.exercise_name })}
+              >
                 Remove
               </button>
             </div>
@@ -292,13 +296,14 @@ export default function TemplateEditor() {
                   <button
                     aria-label="Increase target sets"
                     onClick={() => handleTargetSetsChange(ex.id, ex.target_sets + 1)}
+                    disabled={ex.target_sets >= MAX_TARGET_SETS}
                     style={{
                       width: 28,
                       height: 28,
                       borderRadius: 8,
                       border: "1px solid var(--border)",
                       background: "transparent",
-                      color: "var(--text-dim)",
+                      color: ex.target_sets >= MAX_TARGET_SETS ? "var(--text-faint)" : "var(--text-dim)",
                     }}
                   >
                     +
@@ -317,7 +322,7 @@ export default function TemplateEditor() {
                       fontSize: 12,
                       fontWeight: 600,
                       border: "none",
-                      background: ex.weight_unit === unit ? "var(--bamboo)" : "transparent",
+                      background: ex.weight_unit === unit ? "var(--chili)" : "transparent",
                       color: ex.weight_unit === unit ? "#fff" : "var(--text-dim)",
                     }}
                   >
@@ -353,14 +358,14 @@ export default function TemplateEditor() {
   );
 }
 
-function GeneratedExerciseRow({ exercise, active, swapping, onToggle, onSwap }) {
+function GeneratedExerciseRow({ exercise, active, swapping, onToggle, onSwap, onWeightUnitChange }) {
   const REASONS = [
     ["too_hard", "Too hard"],
     ["unavailable", "Not available"],
     ["wrong", "Not right for me"],
   ];
   return (
-    <div className="card" style={{ marginBottom: 10 }}>
+    <div className="card card-accent" style={{ marginBottom: 10, "--accent-color": "var(--chili)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
           <p style={{ fontWeight: 600 }}>{exercise.exercise_name}</p>
@@ -369,15 +374,36 @@ function GeneratedExerciseRow({ exercise, active, swapping, onToggle, onSwap }) 
           </p>
         </div>
         <button
-          className="btn-ghost"
-          style={{ background: "none", border: "1px solid var(--border)", fontSize: 12, padding: "6px 12px", borderRadius: "var(--radius)" }}
+          className="btn btn-secondary"
+          style={{ padding: "6px 12px", fontSize: 12 }}
           onClick={onToggle}
           disabled={swapping}
         >
           Swap
         </button>
       </div>
-      <p style={{ fontSize: 13, marginTop: 6 }}>{exercise.target_sets} target sets · {exercise.weight_unit}</p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+        <p style={{ fontSize: 13 }}>{exercise.target_sets} target sets</p>
+        <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
+          {["kg", "lb"].map((unit) => (
+            <button
+              key={unit}
+              onClick={() => onWeightUnitChange(unit)}
+              aria-pressed={exercise.weight_unit === unit}
+              style={{
+                padding: "6px 12px",
+                fontSize: 12,
+                fontWeight: 600,
+                border: "none",
+                background: exercise.weight_unit === unit ? "var(--chili)" : "transparent",
+                color: exercise.weight_unit === unit ? "#fff" : "var(--text-dim)",
+              }}
+            >
+              {unit}
+            </button>
+          ))}
+        </div>
+      </div>
       {active && (
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
           {REASONS.map(([value, label]) => (
@@ -477,17 +503,19 @@ function ExerciseSearch({ onAdd, onClose }) {
           {query || category ? `No exercises found.` : "No exercises available."}
         </p>
       )}
-      {results.map((ex) => (
-        <div
-          key={ex.wger_exercise_id}
-          className="card"
-          style={{ marginBottom: 8, cursor: "pointer" }}
-          onClick={() => onAdd(ex.wger_exercise_id)}
-        >
-          <p style={{ fontWeight: 600 }}>{ex.name}</p>
-          {ex.category && <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{ex.category}</p>}
-        </div>
-      ))}
+      <div className="resource-results-grid">
+        {results.map((ex) => (
+          <div
+            key={ex.wger_exercise_id}
+            className="card card-accent"
+            style={{ marginBottom: 8, cursor: "pointer", "--accent-color": "var(--chili)" }}
+            onClick={() => onAdd(ex.wger_exercise_id)}
+          >
+            <p style={{ fontWeight: 600 }}>{ex.name}</p>
+            {ex.category && <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{ex.category}</p>}
+          </div>
+        ))}
+      </div>
       {nextOffset !== null && !loading && (
         <button className="btn btn-secondary" style={{ width: "100%" }} onClick={handleLoadMore} disabled={loadingMore}>
           {loadingMore ? "Loading..." : `Load More (${count - results.length} left)`}

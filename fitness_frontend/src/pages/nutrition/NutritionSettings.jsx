@@ -6,6 +6,7 @@ import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Stat
 import { useToast } from "../../context/ToastContext";
 import { getNutritionProfile, updateNutritionProfile, getSuggestedGoals } from "../../api/nutrition";
 import { updateProfile } from "../../api/accounts";
+import DatePicker from "../../components/DatePicker";
 
 // Mirrors NutritionProfileSerializer's bounds on the backend.
 const GOAL_FIELDS = [
@@ -102,6 +103,14 @@ export default function NutritionSettings() {
 
   function handleChange(field, value) {
     setGoals((g) => ({ ...g, [field]: value }));
+  }
+
+  // Local calendar date as YYYY-MM-DD. Not toISOString() -- that's UTC,
+  // which reads as yesterday in the Philippines before 8 AM local.
+  function todayStr() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
   async function handleToggleAutoRecalculate() {
@@ -209,11 +218,12 @@ export default function NutritionSettings() {
               />
             )}
             {missingFields.includes("age") && (
-              <div>
-                <label>{MISSING_FIELD_CONFIG.age.label}</label>
-                <input type="date" max={new Date().toISOString().split("T")[0]} value={aboutYou.date_of_birth}
-                  onChange={(e) => setAboutYou((a) => ({ ...a, date_of_birth: e.target.value }))} />
-              </div>
+              <DatePicker
+                label={MISSING_FIELD_CONFIG.age.label}
+                value={aboutYou.date_of_birth}
+                onChange={(v) => setAboutYou((a) => ({ ...a, date_of_birth: v }))}
+                max={todayStr()}
+              />
             )}
             {missingFields.includes("gender") && (
               <div>

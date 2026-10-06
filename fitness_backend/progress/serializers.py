@@ -1,6 +1,11 @@
 from rest_framework import serializers
 
-from .models import ProgressReport, ProgressReportSettings
+from .models import (
+    MAX_DAY_INTERVAL,
+    MIN_DAY_INTERVAL,
+    ProgressReport,
+    ProgressReportSettings,
+)
 
 
 class ProgressReportListSerializer(serializers.ModelSerializer):
@@ -33,9 +38,10 @@ class ProgressReportDetailSerializer(serializers.ModelSerializer):
 
 
 class ProgressReportSettingsSerializer(serializers.ModelSerializer):
-    day_interval = serializers.IntegerField(min_value=1, max_value=90)
+    day_interval = serializers.IntegerField(min_value=MIN_DAY_INTERVAL, max_value=MAX_DAY_INTERVAL)
     due_status = serializers.SerializerMethodField()
     next_generation_date = serializers.SerializerMethodField()
+    has_new_data = serializers.SerializerMethodField()
 
     class Meta:
         model = ProgressReportSettings
@@ -46,8 +52,9 @@ class ProgressReportSettingsSerializer(serializers.ModelSerializer):
             "last_generated_at",
             "due_status",
             "next_generation_date",
+            "has_new_data",
         ]
-        read_only_fields = ["last_generated_at", "due_status", "next_generation_date"]
+        read_only_fields = ["last_generated_at", "due_status", "next_generation_date", "has_new_data"]
 
     def get_due_status(self, obj):
         return obj.due_status()
@@ -55,10 +62,13 @@ class ProgressReportSettingsSerializer(serializers.ModelSerializer):
     def get_next_generation_date(self, obj):
         return obj.next_generation_date()
 
+    def get_has_new_data(self, obj):
+        return obj.has_new_data()
+
 
 class GenerateReportSerializer(serializers.Serializer):
     """POST body for triggering report generation."""
 
-    period_days = serializers.IntegerField(required=False, min_value=1, max_value=90)
+    period_days = serializers.IntegerField(required=False, min_value=MIN_DAY_INTERVAL, max_value=MAX_DAY_INTERVAL)
     report_type = serializers.ChoiceField(choices=["short", "detailed"], required=False)
     triggered_by = serializers.ChoiceField(choices=["manual", "interval"], required=False, default="manual")

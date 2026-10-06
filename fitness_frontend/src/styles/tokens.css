@@ -64,6 +64,8 @@
      breakpoint, you still have to change every @media line below. */
   --bp-desktop: 900px;
 
+  --content-width: 800px;
+
   color-scheme: dark;
 }
 
@@ -77,6 +79,7 @@ body {
   padding: 0;
   background: var(--bg);
   color: var(--text);
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -225,17 +228,28 @@ label {
   background: var(--bg-card-hover);
 }
 
-/* .btn-ghost {
-  background: transparent;
-  color: var(--accent, var(--chili));
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  padding: 14px 8px;
-  margin: -14px -8px;
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: -8px; /* bigger tap target without growing the header */
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.btn-ghost:active:not(:disabled) {
-  opacity: 0.6;
-} */
+.icon-btn:hover {
+  background: var(--bg-card);
+  color: var(--text);
+}
+
+.page-actions {
+  display: flex;
+  gap: 8px;
+}
 
 .btn-ghost {
   background: transparent;
@@ -261,17 +275,9 @@ label {
   padding: 16px;
 }
 
-/* Whole-card-is-a-link pattern: left accent bar + trailing chevron.
-   Used on: Resources article cards, Resources food/exercise result
-   cards, ChatList rows, ReportsList rows. Anything the user taps
-   anywhere on to navigate should use this; cards with their own
-   internal action buttons (e.g. WorkoutsDashboard template/history
-   cards) should NOT — the chevron implies "tap anywhere," which is
-   wrong when only specific sub-buttons are actionable. */
 .card-tab {
   position: relative;
   padding-left: 20px;
-  padding-right: 28px; /* room for the chevron */
 }
 .card-tab::before {
   content: "";
@@ -283,15 +289,7 @@ label {
   border-radius: 2px;
   background: var(--accent-color, var(--chili));
 }
-.card-tab::after {
-  content: "";
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-faint);
-  font-size: 20px;
-}
+
 .card-tab:active {
   opacity: 0.85;
 }
@@ -477,32 +475,62 @@ label {
 
 .nutrition-actions {
   width: 100%;
-  max-width: 700px;
-  margin-bottom: 16px;
+  max-width: var(--content-width);
+  margin: 0 auto 16px;
+}
+
+.nutrition-summary-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.summary-ring {
+  display: flex;
+  justify-content: center;
+}
+.summary-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.summary-remaining {
+  text-align: center;
+}
+.summary-totals {
+  display: flex;
+  gap: 24px;
+}
+.summary-macros {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+}
+.summary-macros .progress-track {
+  height: 4px;
 }
 
 /* Two-column form layout (mobile: stacked; desktop: side-by-side —
    see the desktop block below). */
-.profile-col-right,
-.profile-grid,
-.form-col,
-.form-grid {
+.profile-col-left,
+.profile-col-right {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
-.form-col,
-.form-grid {
-  gap: 14px;
+  gap: 20px;
 }
 
-/* @media (min-width: 900px) {
-  .profile-col-left {
-    position: sticky;
-    top: 28px;
-    align-self: start; 
-  }
-} */
+
+.profile-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: var(--content-width);
+  margin: 0 auto;
+}
 
 /* ============================================================
    AUTH PAGES (Login / Signup)
@@ -670,6 +698,15 @@ label {
   overflow-wrap: anywhere;
 }
 
+.entry-row {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+.entry-row:hover {
+  background: var(--bg-raised);
+}
+
 /* ============================================================================
    DESKTOP (min-width: 900px)
    Everything that only applies at desktop width lives in this single block,
@@ -750,18 +787,14 @@ label {
   }
   .app-content {
     width: 100%;
-    max-width: 1200px;
+    max-width: calc(var(--content-width) + 64px); /* + .page's 32px side padding x2 */
     margin: 0 auto;
   }
 
   /* ---- Narrow single-column pages (profile/settings/forms) ---- */
-  .page-narrow {
-    max-width: 640px;
-    margin: 0 auto;
-    width: 100%;
-  }
+  .page-narrow,
   .form-narrow {
-    max-width: 760px;
+    max-width: var(--content-width);
     margin: 0 auto;
     width: 100%;
   }
@@ -802,6 +835,7 @@ label {
   .workout-template-grid,
   .workout-history-grid,
   .food-search-results-grid,
+  .weight-history-grid,
   .resource-results-grid,
   .chat-list-grid,
   .report-list-grid {
@@ -812,6 +846,7 @@ label {
   .workout-template-grid .card,
   .workout-history-grid .card,
   .food-search-results-grid .card,
+  .weight-history-grid .card,
   .resource-results-grid .card,
   .chat-list-grid .card,
   .report-list-grid .card {
@@ -827,119 +862,178 @@ label {
   .history-detail,
   .template-editor,
   .active-workout,
-  .chat-detail {
+  .chat-detail,
+  .report-detail,
+  .food-detail,
+  .workout-trends {
     width: 100%;
-    max-width: 800px;
+    max-width: var(--content-width);
     margin: 0 auto;
-  }
-  .report-detail {
-    width: 100%;
-    max-width: 1000px;
-    margin: 0 auto;
-  }
-  .report-list-grid .card {
-    min-height: 10px; /* TODO: see note above — currently a no-op */
   }
 
-  /* ---- Nutrition ---- */
+  /* When the capped class sits on the same element as .page, the 32px
+     side padding is inside the cap (border-box), so add it back. */
+  .page.history-detail,
+  .page.template-editor,
+  .page.active-workout,
+  .page.chat-detail,
+  .page.report-detail,
+  .page.food-detail,
+  .page.page-narrow,
+  .page.form-narrow {
+    max-width: calc(var(--content-width) + 64px);
+  }
+
+    /* ---- Nutrition ---- */
   .nutrition-content,
-  .nutrition-date-nav {
+  .nutrition-date-nav,
+  .nutrition-trends {
     width: 100%;
-    max-width: 700px;
+    max-width: var(--content-width);
     margin: 0 auto;
   }
+
   .nutrition-summary-card {
-    display: grid !important;
-    grid-template-columns: auto 1fr;
-    align-items: center !important;
-    column-gap: 32px;
+    display: grid;
+    grid-template-columns: 1fr auto auto 1fr; /* outer columns are spacers that center the pair */
+    align-items: center;
+    column-gap: 0;
+    row-gap: 20px;
   }
-  .nutrition-summary-card > div:nth-child(2) {
-    text-align: left !important;
+  .summary-ring {
+    grid-column: 2;
+    margin-right: 40px;
   }
-  .nutrition-summary-card > div:nth-child(3) {
-    justify-content: flex-start !important;
+  .summary-figures {
+    grid-column: 3;
+    align-items: flex-start;
+    gap: 16px;
   }
-  .nutrition-summary-card > div:nth-child(4) {
+  .summary-remaining {
+    text-align: left;
+  }
+  .summary-totals {
+    gap: 32px;
+  }
+  .summary-macros {
     grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-top: 0;
   }
+  .summary-macros .progress-track {
+    height: 6px; /* back to normal on desktop */
+  }
+
   .nutrition-meals-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
-  .food-detail {
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-  }
   .nutrition-settings {
-    max-width: 800px;
-    margin: 0 auto;
-  }
-  .nutrition-trends {
-    max-width: 900px;
+    max-width: var(--content-width);
     margin: 0 auto;
   }
 
   /* ---- Workouts ---- */
-  .workout-trends {
-    width: 100%;
-    max-width: 900px;
-    margin: 0 auto;
-  }
 
   /* ---- Chat ---- */
-  .chat-new-button {
-    width: auto;
-    margin-left: auto;
-    display: block;
-  }
   /* 120px = half of .sidebar's 240px width, offsetting the composer's
      centering so it centers within the content area to the right of
      the sidebar rather than the full viewport. If .sidebar's width
-     changes, this must change with it — not derived automatically. */
+     changes, this must change with it. */
   .chat-composer {
     left: calc(240px + (100% - 240px) / 2) !important;
     transform: translateX(-50%) !important;
     bottom: 24px !important;
-
-    width: min(700px, calc(100% - 288px)) !important;
-    max-width: 700px !important;
-
+    width: min(var(--content-width), calc(100% - 288px)) !important;
+    max-width: var(--content-width) !important;
     border-radius: 16px;
   }
-
   .chat-composer input {
     width: 100%;
-    max-width: 900px;
+    max-width: var(--content-width);
   }
-
   .chat-composer button {
     flex-shrink: 0;
   }
 
-  /* ---- Progress / profile ---- */
-  .progress-actions {
+  /* ---- Shared page actions / profile ---- */
+  .page-actions {
     justify-content: flex-end;
   }
-  .progress-actions .btn {
+  .page-actions .btn {
     flex: 0 0 auto !important;
     width: auto !important;
   }
-  .profile-card {
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-  }
+  .profile-card,
   .weight-progress-card {
     width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
+    max-width: none;
+    margin: 0;
   }
-  .weight-progress-card > div:nth-of-type(2) {
-    max-width: 700px;
-    width: 100%;
-    margin: 0 auto;
+
+  /* END DESKTOP */
+}
+
+/* ============================================================
+   UNIFORM CONTROL HEIGHT
+   ============================================================ */
+:root {
+  --control-h: 42px;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+select {
+  height: var(--control-h);
+  min-height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* .btn:not(.btn-ghost) {
+  height: var(--control-h);
+  min-height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+} */
+
+/* ============================================================
+   SELECT CHEVRON (custom, replaces the native arrow)
+   ============================================================ */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%23a6a9ae' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 12px 8px;
+}
+select:focus {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%23f2f0eb' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+}
+
+/* ============================================================
+   FORM LAYOUT (EditProfile / Onboarding)
+   .form-col was used in JSX but never defined.
+   ============================================================ */
+.form-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+/* Mobile only: stack the two columns with a gap. Scoped so it
+   doesn't override the desktop 2-column grid. */
+@media (max-width: 899px) {
+  .form-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
   }
 }

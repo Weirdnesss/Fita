@@ -6,11 +6,18 @@ import WeightProgress from "../components/WeightProgress";
 import { Loading } from "../components/Status";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { isProfileIncomplete, formatHeight } from "../lib/profile";
+import { useProfileStats } from "../lib/useProfileStats";
+import SettingsButton from "../components/SettingsButton";
+import { nextReportInfo } from "../lib/reports";
+import { usePwaInstall } from "../lib/pwaInstall";
 
 export default function ProfilePage() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const [confirmingLogout, setConfirmingLogout] = useState(false);
+  const { stats, latestReport, reportSettings, statsLoading } = useProfileStats();
+  const nextReport = nextReportInfo(reportSettings);
+  const overCalories = stats.calorieTarget > 0 && stats.caloriesToday > stats.calorieTarget;
 
   if (loading) return <div className="page"><Loading /></div>;
   if (!user) return null;
@@ -26,8 +33,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="page page-narrow">
-      <PageHeader title="Profile" />
+    <div className="page">
+      <PageHeader
+        title="Profile"
+        action={<SettingsButton to="/profile/edit" label="Edit profile" />}
+      />
 
       {incomplete && (
         <div className="card" style={{ background: "var(--chili-tint)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -55,28 +65,59 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: "10px 14px", fontSize: 13, flex: 1 }}
-                onClick={() => navigate("/profile/edit")}
-              >
-                Edit
-              </button>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: "10px 14px", fontSize: 13, flex: 1, color: "var(--chili)" }}
-                onClick={() => setConfirmingLogout(true)}
-              >
-                Log Out
-              </button>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+              <StatBox label="This week" value={stats.workoutsThisWeek} unit="workouts" accent="bamboo" onClick={() => navigate("/workouts")} />
+              <StatBox label="Log Streak" value={stats.streak} unit="days" accent="turmeric" />
+              <StatBox label="Workout streak" value={stats.workoutStreak} unit="days" accent="ube" />
             </div>
+
+{stats.calorieTarget > 0 && (
+  <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+      <span className="eyebrow">Today's calories</span>
+      <span className="stat" style={{ fontSize: 12, color: overCalories ? "var(--chili)" : "var(--text-dim)" }}>
+        {stats.caloriesToday} / {stats.calorieTarget} kcal
+      </span>
+    </div>
+    <div className="progress-track">
+      <div
+        className="progress-fill"
+        style={{
+          width: `${Math.min(100, (stats.caloriesToday / stats.calorieTarget) * 100)}%`,
+          "--accent-color": overCalories ? "var(--chili)" : "var(--bamboo)",
+        }}
+      />
+    </div>
+  </div>
+)}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+            <LinkRow
+              label="Latest report"
+              value={latestReport ? `Report #${latestReport.report_number}` : "None yet"}
+              onClick={() => navigate(latestReport ? `/progress/${latestReport.id}` : "/progress")}
+            />
+            {nextReport && (
+              <LinkRow label="Next report" value={nextReport.text} onClick={() => navigate("/progress/settings")} />
+            )}
+            <InstallRow />
+          </div>
           </div>
         </div>
 
         <div className="profile-col-right">
           <WeightProgress />
         </div>
+      </div>
+
+      <div className="page-actions">
+        <button
+          className="btn btn-secondary btn-block"
+          style={{ color: "var(--chili)" }}
+          onClick={() => setConfirmingLogout(true)}
+        >
+          Log Out
+        </button>
       </div>
 
       <ConfirmDialog
@@ -106,18 +147,38 @@ function StatBox({ label, value, unit, accent, onClick }) {
   );
 }
 
-function DetailRow({ label, value }) {
+function LinkRow({ label, value, onClick }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+    <div
+      onClick={onClick}
+      style={{ display: "flex", justifyContent: "space-between", fontSize: 14, cursor: "pointer", padding: "6px 0" }}
+    >
       <span style={{ color: "var(--text-dim)" }}>{label}</span>
-      <span style={{ fontWeight: 500, textAlign: "right", maxWidth: "60%" }}>{value}</span>
+      <span style={{ fontWeight: 500 }}>{value} ›</span>
     </div>
   );
 }
 
-function formatChoice(value) {
-  if (!value) return "--";
-  return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+function InstallRow() {
+  const { installed, canPrompt, showIosHelp, install } = usePwaInstall();
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  if (installed || (!canPrompt && !showIosHelp)) return null;
+
+  return (
+    <div>
+      <LinkRow
+        label="Install app"
+        value={canPrompt ? "Add to your device" : "How to install"}
+        onClick={canPrompt ? install : () => setHelpOpen((o) => !o)}
+      />
+      {helpOpen && (
+        <p style={{ fontSize: 12, color: "var(--text-faint)", padding: "0 0 6px" }}>
+          Tap the Share button in Safari, then choose "Add to Home Screen".
+        </p>
+      )}
+    </div>
+  );
 }
 
 const avatarStyle = {

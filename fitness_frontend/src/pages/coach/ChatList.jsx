@@ -52,9 +52,11 @@ export default function ChatList() {
       <PageHeader title="Fitness Assistant" subtitle="Chat for explanations and recommendations" />
       <ErrorBanner message={error} />
 
-      <button className="btn btn-primary chat-new-button" onClick={handleNewChat} disabled={creating}>
-        {creating ? "Starting..." : "+ New Chat"}
-      </button>
+      <div className="page-actions">
+        <button className="btn btn-primary btn-block" onClick={handleNewChat} disabled={creating}>
+          {creating ? "Starting..." : "+ New Chat"}
+        </button>
+      </div>
 
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
@@ -67,7 +69,7 @@ export default function ChatList() {
           <EmptyState title="No chats yet" eyebrow="Start a new chat to get personalized fitness recommendations." />
         )}
 
-        <div className="chat-list-grid">
+        <div className="chat-list-grid" style={{ "--accent-color": "var(--chili)" }}>
         {visibleChats.map((c) => (
           <div key={c.id} className="card card-tab" style={{ marginBottom: 10, cursor: "pointer" }} onClick={() => navigate(`/coach/${c.id}`)}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -87,7 +89,7 @@ export default function ChatList() {
         {chats?.length > visibleCount && (
           <button
             className="btn btn-secondary"
-            style={{ width: "100%", marginTop: 4 }}
+            style={{ width: "100%", marginTop: 16 }}
             onClick={() => setVisibleCount((c) => c + CHATS_PAGE_SIZE)}
           >
             Load More ({chats.length - visibleCount} left)

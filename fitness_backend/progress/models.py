@@ -1,6 +1,10 @@
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django.core.validators import MaxValueValidator, MinValueValidator
+
+MIN_DAY_INTERVAL = 1
+MAX_DAY_INTERVAL = 30
 
 
 class ReportType(models.TextChoices):
@@ -80,7 +84,10 @@ class ProgressReportSettings(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="report_settings"
     )
-    day_interval = models.PositiveSmallIntegerField(default=7)
+    day_interval = models.PositiveSmallIntegerField(
+        default=7,
+        validators=[MinValueValidator(MIN_DAY_INTERVAL), MaxValueValidator(MAX_DAY_INTERVAL)],
+    )
     report_type = models.CharField(
         max_length=10, choices=ReportType.choices, default=ReportType.SHORT
     )

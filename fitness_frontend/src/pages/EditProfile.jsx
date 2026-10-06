@@ -7,6 +7,7 @@ import HeightField from "../components/HeightField";
 import UnitToggle from "../components/UnitToggle";
 import { ErrorBanner, extractErrorMessage } from "../components/Status";
 import { useToast } from "../context/ToastContext";
+import DatePicker from "../components/DatePicker";
 
 const GENDERS = [
   ["male", "Male"],
@@ -58,6 +59,14 @@ function initialFormFrom(profile) {
   };
 }
 
+// Local calendar date as YYYY-MM-DD. Not toISOString() -- that's UTC,
+// which reads as yesterday in the Philippines before 8 AM local.
+function todayStr() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export default function EditProfile() {
   const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
@@ -101,7 +110,7 @@ export default function EditProfile() {
     <div className="page">
       <PageHeader title="Edit Profile" back backTo="/profile" />
 
-      <form onSubmit={handleSubmit} className="form-narrow" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <h3 style={{ marginBottom: 2 }}>Units</h3>
@@ -125,8 +134,12 @@ export default function EditProfile() {
                 </select>
               </div>
               <div>
-                <label>Date of birth</label>
-                <input type="date" max={new Date().toISOString().split("T")[0]} value={form.dateOfBirth} onChange={set("dateOfBirth")} />
+                <DatePicker
+                  label="Date of birth"
+                  value={form.dateOfBirth}
+                  onChange={(v) => setForm((f) => ({ ...f, dateOfBirth: v }))}
+                  max={todayStr()}
+                />
               </div>
             </div>
 

@@ -26,6 +26,26 @@ GENERATED_TEMPLATE_ERROR = {
     "error": "Generated routines can't be edited directly. Delete it and tap Generate again for a new one."
 }
 
+MIN_TARGET_SETS = 1
+MAX_TARGET_SETS = 10
+
+
+def parse_target_sets(value):
+    """Returns (target_sets, None) if valid, else (None, error Response)."""
+    try:
+        target_sets = int(value)
+    except (TypeError, ValueError):
+        return None, Response(
+            {"error": "target_sets must be an integer"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not (MIN_TARGET_SETS <= target_sets <= MAX_TARGET_SETS):
+        return None, Response(
+            {"error": f"target_sets must be between {MIN_TARGET_SETS} and {MAX_TARGET_SETS}"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return target_sets, None
+
 
 class ExerciseSearchView(APIView):
     """
@@ -186,19 +206,9 @@ class AddExerciseToTemplateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        target_sets = request.data.get("target_sets", 3)
-        try:
-            target_sets = int(target_sets)
-        except (TypeError, ValueError):
-            return Response(
-                {"error": "target_sets must be an integer"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if target_sets < 1:
-            return Response(
-                {"error": "target_sets must be at least 1"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        target_sets, error = parse_target_sets(request.data.get("target_sets", 3))
+        if error:
+            return error
 
         cached = WgerExercise.objects.filter(id=wger_exercise_id).first()
         if not cached:
@@ -254,24 +264,24 @@ class TemplateExerciseDetailView(APIView):
 
     def patch(self, request, template_id, exercise_id):
         template, exercise = self.get_exercise(request, template_id, exercise_id)
-        if template.is_generated:
+
+        # Generated templates block edits in general (see
+        # GENERATED_TEMPLATE_ERROR), but weight_unit is deliberately
+        # exempted -- it's a per-session display preference, not a change
+        # to the routine itself, so it doesn't need to wait for the
+        # weekly regenerate cooldown like target_sets does.
+        is_only_weight_unit = set(request.data.keys()) <= {"weight_unit"}
+        if template.is_generated and not is_only_weight_unit:
             return Response(GENERATED_TEMPLATE_ERROR, status=status.HTTP_403_FORBIDDEN)
 
         update_fields = []
 
         if "target_sets" in request.data:
-            try:
-                target_sets = int(request.data.get("target_sets"))
-            except (TypeError, ValueError):
-                return Response(
-                    {"error": "target_sets must be an integer"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            if target_sets < 1:
-                return Response(
-                    {"error": "target_sets must be at least 1"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            if template.is_generated:
+                return Response(GENERATED_TEMPLATE_ERROR, status=status.HTTP_403_FORBIDDEN)
+            target_sets, error = parse_target_sets(request.data.get("target_sets"))
+            if error:
+                return error
             exercise.target_sets = target_sets
             update_fields.append("target_sets")
 

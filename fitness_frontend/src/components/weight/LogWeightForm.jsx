@@ -3,23 +3,30 @@ import { useAuth } from "../../context/AuthContext";
 import { logWeight } from "../../api/accounts";
 import { ErrorBanner, extractErrorMessage } from "../Status";
 import WeightField from "../WeightField";
+import DatePicker from "../DatePicker";
 import { useToast } from "../../context/ToastContext";
 
-const todayStr = () => new Date().toISOString().split("T")[0];
+// Local calendar date as YYYY-MM-DD. Not toISOString() -- that's UTC,
+// which reads as yesterday in the Philippines before 8 AM local.
+function toDateStr(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+const todayStr = () => toDateStr(new Date());
 
 // Matches the backend's WeightLogSerializer.validate_logged_at: the
-// later of (today - 7 days) or account creation. Backdating further
-// back than that is more likely a guess than an actual memory, and
-// there's nothing meaningful to backdate to before the account existed
-// anyway. This is a UI convenience (disables invalid dates up front)
-// -- the backend enforces the same rule regardless, so bypassing this
-// via devtools still gets rejected server-side.
+// later of (today - 7 days) or account creation. This is a UI
+// convenience (DatePicker disables invalid dates up front) -- the
+// backend enforces the same rule regardless.
 function earliestLoggableDate(user) {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const signupDate = user?.date_joined ? new Date(user.date_joined) : null;
   const floor = signupDate && signupDate > sevenDaysAgo ? signupDate : sevenDaysAgo;
-  return floor.toISOString().split("T")[0];
+  return toDateStr(floor);
 }
 
 export default function LogWeightForm({ onLogged, onCancel }) {
@@ -35,7 +42,10 @@ export default function LogWeightForm({ onLogged, onCancel }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (weightKg === "") return;
+    if (weightKg === "") {
+      setError("Enter your weight first.");
+      return;
+    }
     setError("");
     setSaving(true);
     try {
@@ -55,48 +65,64 @@ export default function LogWeightForm({ onLogged, onCancel }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <div>
-          <WeightField
-            required
-            label="Weight"
-            kg={weightKg}
-            onChange={setWeightKg}
-            placeholder="e.g. 78.5"
-            defaultUnit={unitSystem === "imperial" ? "lbs" : "kg"}
-            allowToggle={false}
-          />
-        </div>
-        <div>
-          <label>Date</label>
-          <input type="date" min={minDate} max={todayStr()} value={loggedAt} onChange={(e) => setLoggedAt(e.target.value)} />
-        </div>
+    <form
+      onSubmit={handleSubmit}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        padding: 14,
+        background: "var(--bg-raised)",
+        border: "1px solid var(--border-soft)",
+        borderRadius: "var(--radius-md)",
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: 12,
+          alignItems: "start",
+        }}
+      >
+        <WeightField
+          required
+          autoFocus
+          label="Weight"
+          kg={weightKg}
+          onChange={setWeightKg}
+          placeholder="e.g. 78.5"
+          defaultUnit={unitSystem === "imperial" ? "lbs" : "kg"}
+          allowToggle={false}
+        />
+        <DatePicker label="Date" value={loggedAt} onChange={setLoggedAt} min={minDate} max={todayStr()} />
       </div>
-      <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-        You can log up to 7 days back (or since you joined, if that's sooner). Logging again for a date you've
-        already logged updates that entry instead of adding a duplicate.
-      </p>
-      <ErrorBanner message={error} />
-        <div style={{ display: "flex", gap: 8 }}>
-        <button
-            className="btn btn-primary"
-            disabled={saving}
-            style={{ flex: 1 }}
-        >
-            {saving ? "Saving..." : "Log Weight"}
-        </button>
 
+      <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
+        Up to 7 days back. Logging a date again updates that entry.
+      </p>
+
+      <ErrorBanner message={error} />
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={onCancel}
-            disabled={saving}
-            style={{ flex: 1 }}
+          type="button"
+          className="btn btn-secondary"
+          style={{ padding: "8px 14px", fontSize: 13 }}
+          onClick={onCancel}
+          disabled={saving}
         >
-            Cancel
+          Cancel
         </button>
-        </div>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          style={{ padding: "8px 18px", fontSize: 13 }}
+          disabled={saving}
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+      </div>
     </form>
   );
 }

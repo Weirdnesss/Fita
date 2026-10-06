@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
@@ -6,10 +6,11 @@ import { getChat, sendMessage } from "../../api/coach";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+const REMARK_PLUGINS = [remarkGfm];
+
 export default function ChatDetail() {
   const { id } = useParams();
   const [chat, setChat] = useState(null);
-  const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const bottomRef = useRef(null);
@@ -58,12 +59,10 @@ export default function ChatDetail() {
     }
   }
 
-  async function handleSend(e) {
-    e.preventDefault();
-    if (!input.trim() || sending) return;
-    const content = input.trim();
+  async function handleSend(raw) {
+    const content = raw.trim();
+    if (!content || sending) return;
     const tempId = `temp-${Date.now()}`;
-    setInput("");
     setError("");
 
     // Optimistic append of the user's message.
@@ -135,26 +134,16 @@ export default function ChatDetail() {
 
       <ErrorBanner message={error} />
 
-      <form
-        onSubmit={handleSend}
-        className="chat-composer"
-        style={{ ...composerStyle, bottom: keyboardOffset > 0 ? keyboardOffset : composerStyle.bottom }}
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about workouts, nutrition, or fitness advice..."
-          disabled={sending}
-        />
-        <button className="btn btn-primary" type="submit" disabled={sending || !input.trim()} style={{ padding: "11px 16px" }}>
-          →
-        </button>
-      </form>
+      <Composer
+        onSend={handleSend}
+        sending={sending}
+        bottom={keyboardOffset > 0 ? keyboardOffset : composerStyle.bottom}
+      />
     </div>
   );
 }
 
-function MessageBubble({ role, content, pending, noReply }) {
+ const MessageBubble = memo(function MessageBubble({ role, content, pending, noReply }) {
   const isUser = role === "user";
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start" }}>
@@ -172,7 +161,7 @@ function MessageBubble({ role, content, pending, noReply }) {
           opacity: pending ? 0.6 : 1,
         }}
       >
-        {isUser ? content : <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>}
+        {isUser ? content : <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{content}</ReactMarkdown>}
       </div>
       {noReply && (
         <p style={{ fontSize: 11, color: "var(--chili)", marginTop: 4 }}>
@@ -181,7 +170,33 @@ function MessageBubble({ role, content, pending, noReply }) {
       )}
     </div>
   );
+});
+
+function Composer({ onSend, sending, bottom }) {
+  const [input, setInput] = useState("");
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (!input.trim() || sending) return;
+    onSend(input);
+    setInput("");
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="chat-composer" style={{ ...composerStyle, bottom }}>
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Ask about workouts, nutrition, or fitness advice..."
+        disabled={sending}
+      />
+      <button className="btn btn-primary" type="submit" disabled={sending || !input.trim()} style={{ padding: "11px 16px" }}>
+        →
+      </button>
+    </form>
+  );
 }
+
 
 const composerStyle = {
   position: "fixed",
