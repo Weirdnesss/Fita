@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTHS = [
@@ -6,6 +7,10 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+const POPUP_WIDTH = 272;
+const POPUP_GAP = 6;       // space between the field and the popup
+const VIEWPORT_MARGIN = 8; // minimum space kept from the screen edges
 
 // Local calendar date as YYYY-MM-DD. Never toISOString() for "today" --
 // that's UTC, which reads as yesterday in the Philippines before 8 AM.
@@ -39,10 +44,17 @@ function daysInMonth(year, month) {
  * the month/year header cycles days -> months -> years, so picking a
  * birth date decades back doesn't mean clicking the month arrow
  * hundreds of times.
+ *
+ * The popup is rendered in a portal on document.body with fixed
+ * positioning, so no parent's overflow/stacking context can clip it or
+ * hide it behind other elements. Its position is computed from the
+ * field's bounding box: it opens below when there's room, above when
+ * there isn't, and is always clamped inside the viewport.
  */
 export default function DatePicker({ label, value, onChange, min, max, placeholder = "Select date", required = false }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState("days"); // days | months | years
+  const [pos, setPos] = useState(null); // { top, left, width } in viewport px
   const selected = parseDate(value);
   const minDate = parseDate(min);
   const maxDate = parseDate(max);
@@ -51,20 +63,62 @@ export default function DatePicker({ label, value, onChange, min, max, placehold
   const [viewMonth, setViewMonth] = useState((selected || maxDate || new Date()).getMonth());
 
   const rootRef = useRef(null);
+  const buttonRef = useRef(null);
+  const popupRef = useRef(null);
+
+  function updatePosition() {
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    const width = Math.min(POPUP_WIDTH, vw - VIEWPORT_MARGIN * 2);
+    const popupHeight = popupRef.current ? popupRef.current.offsetHeight : 320;
+
+    const spaceBelow = vh - r.bottom - POPUP_GAP - VIEWPORT_MARGIN;
+    const spaceAbove = r.top - POPUP_GAP - VIEWPORT_MARGIN;
+    const openUp = spaceBelow < popupHeight && spaceAbove > spaceBelow;
+
+    let top = openUp ? r.top - POPUP_GAP - popupHeight : r.bottom + POPUP_GAP;
+    top = Math.max(VIEWPORT_MARGIN, Math.min(top, vh - popupHeight - VIEWPORT_MARGIN));
+
+    let left = Math.min(r.left, vw - width - VIEWPORT_MARGIN);
+    left = Math.max(VIEWPORT_MARGIN, left);
+
+    setPos({ top, left, width });
+  }
+
+  // Measure after render and before paint (no flash in the wrong spot).
+  // Re-run when the view changes because the days/months/years grids
+  // have different heights.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    updatePosition();
+  }, [open, view, viewMonth, viewYear]);
 
   useEffect(() => {
     if (!open) return;
     function onDocClick(e) {
-      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+      const inField = rootRef.current && rootRef.current.contains(e.target);
+      const inPopup = popupRef.current && popupRef.current.contains(e.target);
+      if (!inField && !inPopup) setOpen(false);
     }
     function onEsc(e) {
       if (e.key === "Escape") setOpen(false);
     }
     document.addEventListener("mousedown", onDocClick);
     document.addEventListener("keydown", onEsc);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true); // capture: catches scrolling inside any container
     return () => {
       document.removeEventListener("mousedown", onDocClick);
       document.removeEventListener("keydown", onEsc);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
     };
   }, [open]);
 
@@ -143,10 +197,163 @@ export default function DatePicker({ label, value, onChange, min, max, placehold
   const todayVal = toDateStr(new Date());
   const years = Array.from({ length: 12 }, (_, i) => viewYear - 5 + i);
 
+  const popup = open ? (
+    <div
+      ref={popupRef}
+      role="dialog"
+      style={{
+        position: "fixed",
+        zIndex: 1000,
+        top: pos ? pos.top : 0,
+        left: pos ? pos.left : 0,
+        width: pos ? pos.width : POPUP_WIDTH,
+        visibility: pos ? "visible" : "hidden", // hidden until measured
+        maxHeight: `calc(100vh - ${VIEWPORT_MARGIN * 2}px)`,
+        overflowY: "auto",
+        background: "var(--bg-card)",
+        border: "1px solid var(--border-soft)",
+        borderRadius: "var(--radius-md)",
+        boxShadow: "0 12px 32px rgba(0,0,0,0.45)",
+        padding: 12,
+      }}
+    >
+      {view === "days" && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <NavBtn onClick={() => shiftMonth(-1)} disabled={prevMonthDisabled} label="Previous month">‹</NavBtn>
+            <HeaderBtn onClick={() => setView("months")}>
+              {MONTHS[viewMonth]} {viewYear}
+            </HeaderBtn>
+            <NavBtn onClick={() => shiftMonth(1)} disabled={nextMonthDisabled} label="Next month">›</NavBtn>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 2 }}>
+            {WEEKDAYS.map((w, i) => (
+              <div key={i} className="eyebrow" style={{ textAlign: "center", padding: "4px 0" }}>
+                {w}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+            {dayCells.map((d, i) => {
+              if (d === null) return <div key={i} />;
+              const date = new Date(viewYear, viewMonth, d);
+              const dStr = toDateStr(date);
+              const disabled = isDayDisabled(date);
+              const isSelected = dStr === value;
+              const isToday = dStr === todayVal;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => pickDay(date)}
+                  className="stat"
+                  style={{
+                    aspectRatio: "1",
+                    border: isToday && !isSelected ? "1px solid var(--chili)" : "1px solid transparent",
+                    borderRadius: "var(--radius-sm)",
+                    background: isSelected ? "var(--chili)" : "transparent",
+                    color: disabled ? "var(--text-faint)" : isSelected ? "#fff" : "var(--text)",
+                    opacity: disabled ? 0.4 : 1,
+                    fontSize: 13,
+                    fontWeight: isSelected ? 700 : 500,
+                    cursor: disabled ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {d}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {view === "months" && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <NavBtn onClick={() => shiftYear(-1)} disabled={prevYearDisabled} label="Previous year">‹</NavBtn>
+            <HeaderBtn onClick={() => setView("years")}>{viewYear}</HeaderBtn>
+            <NavBtn onClick={() => shiftYear(1)} disabled={nextYearDisabled} label="Next year">›</NavBtn>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+            {MONTHS_SHORT.map((m, i) => {
+              const disabled = isMonthDisabled(viewYear, i);
+              const isSelected = selected && selected.getFullYear() === viewYear && selected.getMonth() === i;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => pickMonth(i)}
+                  style={{
+                    padding: "10px 4px",
+                    borderRadius: "var(--radius-sm)",
+                    border: "1px solid transparent",
+                    background: isSelected ? "var(--chili)" : "var(--bg-raised)",
+                    color: disabled ? "var(--text-faint)" : isSelected ? "#fff" : "var(--text)",
+                    opacity: disabled ? 0.4 : 1,
+                    fontSize: 13,
+                    fontWeight: isSelected ? 700 : 500,
+                    cursor: disabled ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {m}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {view === "years" && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <NavBtn onClick={() => shiftYearDecade(-1)} disabled={minDate && years[0] - 1 < minDate.getFullYear()} label="Previous years">‹</NavBtn>
+            <span style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 15 }}>
+              {years[0]}–{years[years.length - 1]}
+            </span>
+            <NavBtn onClick={() => shiftYearDecade(1)} disabled={maxDate && years[years.length - 1] + 1 > maxDate.getFullYear()} label="Next years">›</NavBtn>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+            {years.map((y) => {
+              const disabled = isYearDisabled(y);
+              const isSelected = selected && selected.getFullYear() === y;
+              return (
+                <button
+                  key={y}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => pickYear(y)}
+                  className="stat"
+                  style={{
+                    padding: "10px 4px",
+                    borderRadius: "var(--radius-sm)",
+                    border: "1px solid transparent",
+                    background: isSelected ? "var(--chili)" : "var(--bg-raised)",
+                    color: disabled ? "var(--text-faint)" : isSelected ? "#fff" : "var(--text)",
+                    opacity: disabled ? 0.4 : 1,
+                    fontSize: 13,
+                    fontWeight: isSelected ? 700 : 500,
+                    cursor: disabled ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {y}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div ref={rootRef} style={{ position: "relative" }}>
       {label && <label>{label}</label>}
       <button
+        ref={buttonRef}
         type="button"
         onClick={openPicker}
         aria-haspopup="dialog"
@@ -176,155 +383,7 @@ export default function DatePicker({ label, value, onChange, min, max, placehold
         <CalendarIcon />
       </button>
 
-      {open && (
-        <div
-          role="dialog"
-          style={{
-            position: "absolute",
-            zIndex: 50,
-            top: "auto",
-            bottom: "calc(100% + 6px)",
-            left: 0,
-            width: 272,
-            maxWidth: "calc(100vw - 32px)",
-            background: "var(--bg-card)",
-            border: "1px solid var(--border-soft)",
-            borderRadius: "var(--radius-md)",
-            boxShadow: "0 12px 32px rgba(0,0,0,0.45)",
-            padding: 12,
-          }}
-        >
-          {view === "days" && (
-            <>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <NavBtn onClick={() => shiftMonth(-1)} disabled={prevMonthDisabled} label="Previous month">‹</NavBtn>
-                <HeaderBtn onClick={() => setView("months")}>
-                  {MONTHS[viewMonth]} {viewYear}
-                </HeaderBtn>
-                <NavBtn onClick={() => shiftMonth(1)} disabled={nextMonthDisabled} label="Next month">›</NavBtn>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 2 }}>
-                {WEEKDAYS.map((w, i) => (
-                  <div key={i} className="eyebrow" style={{ textAlign: "center", padding: "4px 0" }}>
-                    {w}
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
-                {dayCells.map((d, i) => {
-                  if (d === null) return <div key={i} />;
-                  const date = new Date(viewYear, viewMonth, d);
-                  const dStr = toDateStr(date);
-                  const disabled = isDayDisabled(date);
-                  const isSelected = dStr === value;
-                  const isToday = dStr === todayVal;
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => pickDay(date)}
-                      className="stat"
-                      style={{
-                        aspectRatio: "1",
-                        border: isToday && !isSelected ? "1px solid var(--chili)" : "1px solid transparent",
-                        borderRadius: "var(--radius-sm)",
-                        background: isSelected ? "var(--chili)" : "transparent",
-                        color: disabled ? "var(--text-faint)" : isSelected ? "#fff" : "var(--text)",
-                        opacity: disabled ? 0.4 : 1,
-                        fontSize: 13,
-                        fontWeight: isSelected ? 700 : 500,
-                        cursor: disabled ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      {d}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-
-          {view === "months" && (
-            <>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <NavBtn onClick={() => shiftYear(-1)} disabled={prevYearDisabled} label="Previous year">‹</NavBtn>
-                <HeaderBtn onClick={() => setView("years")}>{viewYear}</HeaderBtn>
-                <NavBtn onClick={() => shiftYear(1)} disabled={nextYearDisabled} label="Next year">›</NavBtn>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-                {MONTHS_SHORT.map((m, i) => {
-                  const disabled = isMonthDisabled(viewYear, i);
-                  const isSelected = selected && selected.getFullYear() === viewYear && selected.getMonth() === i;
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => pickMonth(i)}
-                      style={{
-                        padding: "10px 4px",
-                        borderRadius: "var(--radius-sm)",
-                        border: "1px solid transparent",
-                        background: isSelected ? "var(--chili)" : "var(--bg-raised)",
-                        color: disabled ? "var(--text-faint)" : isSelected ? "#fff" : "var(--text)",
-                        opacity: disabled ? 0.4 : 1,
-                        fontSize: 13,
-                        fontWeight: isSelected ? 700 : 500,
-                        cursor: disabled ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      {m}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-
-          {view === "years" && (
-            <>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <NavBtn onClick={() => shiftYearDecade(-1)} disabled={minDate && years[0] - 1 < minDate.getFullYear()} label="Previous years">‹</NavBtn>
-                <span style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 15 }}>
-                  {years[0]}–{years[years.length - 1]}
-                </span>
-                <NavBtn onClick={() => shiftYearDecade(1)} disabled={maxDate && years[years.length - 1] + 1 > maxDate.getFullYear()} label="Next years">›</NavBtn>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-                {years.map((y) => {
-                  const disabled = isYearDisabled(y);
-                  const isSelected = selected && selected.getFullYear() === y;
-                  return (
-                    <button
-                      key={y}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => pickYear(y)}
-                      className="stat"
-                      style={{
-                        padding: "10px 4px",
-                        borderRadius: "var(--radius-sm)",
-                        border: "1px solid transparent",
-                        background: isSelected ? "var(--chili)" : "var(--bg-raised)",
-                        color: disabled ? "var(--text-faint)" : isSelected ? "#fff" : "var(--text)",
-                        opacity: disabled ? 0.4 : 1,
-                        fontSize: 13,
-                        fontWeight: isSelected ? 700 : 500,
-                        cursor: disabled ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      {y}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-      )}
+      {popup && createPortal(popup, document.body)}
     </div>
   );
 }
