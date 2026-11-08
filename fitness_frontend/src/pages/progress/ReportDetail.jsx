@@ -4,6 +4,7 @@ import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { useToast } from "../../context/ToastContext";
 import { getReport, downloadReportPdf } from "../../api/progress";
+import StickyBar from "../../components/StickyBar";
 
 export default function ReportDetail() {
   const { id } = useParams();
@@ -50,12 +51,13 @@ export default function ReportDetail() {
       {report.status === "failed" && (
         <ErrorBanner message={report.generation_error || "This report failed to generate."} />
       )}
-
+      <StickyBar>
       {report.status === "generated" && (
         <button className="btn btn-secondary" onClick={handleDownloadPdf} disabled={downloading} style={{ marginBottom: 12 }}>
           {downloading ? "Preparing PDF..." : "Download PDF"}
         </button>
       )}
+      </StickyBar>
 
       {report.progress_summary && (
         <Section title="Progress Summary" accent="bamboo" body={report.progress_summary} />

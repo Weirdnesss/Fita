@@ -5,6 +5,7 @@ import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Stat
 import { getChat, sendMessage } from "../../api/coach";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import DetailToggle, { useChatDetail } from "../../components/DetailToggle";
 
 const REMARK_PLUGINS = [remarkGfm];
 
@@ -15,6 +16,8 @@ export default function ChatDetail() {
   const [error, setError] = useState("");
   const bottomRef = useRef(null);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const [detail, setDetail] = useChatDetail();
+
 
   useEffect(() => {
     load();
@@ -72,7 +75,7 @@ export default function ChatDetail() {
     }));
     setSending(true);
     try {
-      const res = await sendMessage(id, content);
+      const res = await sendMessage(id, content, detail);
       setChat((prev) => ({
         ...prev,
         title: prev.title === "New Chat" ? content.slice(0, 60) : prev.title,
@@ -83,7 +86,7 @@ export default function ChatDetail() {
           // by a later unrelated success.
           ...prev.messages.filter((m) => m.id !== tempId),
           { id: `u-${Date.now()}`, role: "user", content },
-          { id: res.message_id, role: "assistant", content: res.assistant_message },
+          { id: res.message_id, role: "assistant", content: res.assistant_message, videos: res.videos || [] },
         ],
       }));
     } catch (err) {
@@ -112,7 +115,11 @@ export default function ChatDetail() {
 
   return (
     <div className="page chat-detail" style={{ paddingBottom: "calc(var(--nav-height) + 90px)" }}>
-      <PageHeader title={chat.title} back />
+      <PageHeader
+        title={chat.title}
+        back
+        action={<DetailToggle value={detail} onChange={setDetail} />}
+      />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {chat.messages.length === 0 && (
@@ -125,6 +132,7 @@ export default function ChatDetail() {
             key={m.id}
             role={m.role}
             content={m.content}
+            videos={m.videos}
             noReply={!sending && i === chat.messages.length - 1 && m.role === "user"}
           />
         ))}
@@ -143,7 +151,7 @@ export default function ChatDetail() {
   );
 }
 
- const MessageBubble = memo(function MessageBubble({ role, content, pending, noReply }) {
+const MessageBubble = memo(function MessageBubble({ role, content, videos, pending, noReply }) {
   const isUser = role === "user";
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start" }}>
@@ -163,6 +171,22 @@ export default function ChatDetail() {
       >
         {isUser ? content : <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{content}</ReactMarkdown>}
       </div>
+      {!isUser && videos?.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6, maxWidth: "82%" }}>
+          {videos.map((v) => (
+            <a
+              key={v.name}
+              href={v.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary"
+              style={{ padding: "6px 12px", fontSize: 12, textDecoration: "none" }}
+            >
+              {v.kind === "search" ? `Find ${v.name} form videos` : `▶ ${v.name} form`}
+            </a>
+          ))}
+        </div>
+      )}
       {noReply && (
         <p style={{ fontSize: 11, color: "var(--chili)", marginTop: 4 }}>
           Didn't get a response -- send another message to try again.

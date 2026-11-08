@@ -471,11 +471,11 @@ def _seed_exercise_pool():
 
 class GenerateWorkoutCooldownBypassTests(APITestCase):
     """
-    Covers the cooldown-bypass-on-relevant-profile-change behavior:
+    Covers when Generate is allowed again (there is no timed cooldown):
     changing workout_frequency/workout_location/primary_goal (the only
-    three fields the generator actually reads) unlocks Generate early;
+    three fields the generator actually reads) unlocks Generate;
     anything else (e.g. activity_level, which the generator doesn't use
-    at all) does not.
+    at all) does not -- the endpoint answers 409 instead.
     """
 
     def setUp(self):
@@ -486,11 +486,11 @@ class GenerateWorkoutCooldownBypassTests(APITestCase):
         self.client.force_authenticate(user=self.user)
         _seed_exercise_pool()
 
-    def test_second_generate_within_7_days_is_rate_limited(self):
+    def test_second_generate_when_nothing_changed_is_refused(self):
         self.client.post("/workouts/generate/")
         response = self.client.post("/workouts/generate/")
-        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
-        self.assertIn("next_eligible_at", response.data)
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("error", response.data)
 
     def test_changing_goal_bypasses_cooldown(self):
         self.client.post("/workouts/generate/")
@@ -519,16 +519,16 @@ class GenerateWorkoutCooldownBypassTests(APITestCase):
         self.profile.activity_level = "very_active"
         self.profile.save()
         response = self.client.post("/workouts/generate/")
-        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
 
     def test_bypass_only_works_once_not_repeatedly(self):
-        """After the bypassed generation, the new snapshot applies -- immediately generating again is still rate limited."""
+        """After the regeneration, the new snapshot applies -- generating again is refused until something relevant changes."""
         self.client.post("/workouts/generate/")
         self.profile.primary_goal = "lose_weight"
         self.profile.save()
         self.client.post("/workouts/generate/")  # bypassed
         response = self.client.post("/workouts/generate/")  # should NOT bypass again
-        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
 
 
 class GenerationEligibilityViewTests(APITestCase):
@@ -555,23 +555,32 @@ class GenerationEligibilityViewTests(APITestCase):
         response = self.client.get("/workouts/generate/eligibility/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["eligible"])
-        self.assertIsNone(response.data["next_eligible_at"])
+        self.assertEqual(response.data["reason"], "first")
 
     def test_not_eligible_right_after_generating(self):
         self.client.post("/workouts/generate/")
         response = self.client.get("/workouts/generate/eligibility/")
         self.assertFalse(response.data["eligible"])
-        self.assertIsNotNone(response.data["next_eligible_at"])
+        self.assertEqual(response.data["reason"], "up_to_date")
 
-    def test_eligible_again_once_cooldown_elapses(self):
+    def test_time_passing_alone_does_not_make_it_eligible_again(self):
+        """There is no timed cooldown any more: eligibility depends only on the profile and the routine."""
         self.client.post("/workouts/generate/")
         state = WorkoutGenerationState.objects.get(user=self.user)
-        state.last_generated_at = timezone.now() - timedelta(days=8)
+        state.last_generated_at = timezone.now() - timedelta(days=30)
         state.save(update_fields=["last_generated_at"])
 
         response = self.client.get("/workouts/generate/eligibility/")
+        self.assertFalse(response.data["eligible"])
+        self.assertEqual(response.data["reason"], "up_to_date")
+
+    def test_eligible_again_when_a_generated_day_is_missing(self):
+        self.client.post("/workouts/generate/")
+        WorkoutTemplate.objects.filter(user=self.user, is_generated=True).first().delete()
+
+        response = self.client.get("/workouts/generate/eligibility/")
         self.assertTrue(response.data["eligible"])
-        self.assertIsNone(response.data["next_eligible_at"])
+        self.assertEqual(response.data["reason"], "missing")
 
     def test_eligible_again_when_relevant_profile_field_changes(self):
         self.client.post("/workouts/generate/")
@@ -580,7 +589,7 @@ class GenerationEligibilityViewTests(APITestCase):
 
         response = self.client.get("/workouts/generate/eligibility/")
         self.assertTrue(response.data["eligible"])
-        self.assertIsNone(response.data["next_eligible_at"])
+        self.assertEqual(response.data["reason"], "profile_changed")
 
     def test_still_ineligible_when_unrelated_field_changes(self):
         """activity_level isn't read by the generator -- must not bypass eligibility either, matching the POST endpoint's own bypass rule."""
@@ -692,3 +701,50 @@ class GenerateWorkoutMedicalConditionTests(APITestCase):
         response = self.client.post("/workouts/generate/")
         self.assertIsNotNone(response.data["medical_note"])
         self.assertIn("doctor or physical therapist", response.data["medical_note"])
+
+
+class BackExercisePoolTests(APITestCase):
+    """
+    Back used to match only four exact name patterns, so home workouts (and
+    many gym ones) ended up with no Back exercise at all. Names and equipment
+    below are real entries from the wger cache.
+    """
+
+    SEEDS = [
+        (1, "DB Single-Arm Row (5kg)", "Dumbbell"),
+        (2, "Bent Over Dumbbell Rows", "Bench, Dumbbell"),
+        (3, "Band pull-aparts", "Resistance band"),
+        (4, "Superman", "Gym mat"),
+        (5, "Neutral Grip Lat Pulldown", "Cable machine"),
+        (6, "Close-grip Lat Pull Down", ""),
+        (7, "Barbell Row (Overhand)", "Barbell"),
+        (8, "Pull-ups", "Pull-up bar"),
+        (9, "Cat-Cow", ""),
+        (10, "Dumbbell Hang Power Cleans", "Dumbbell"),
+    ]
+
+    def setUp(self):
+        for id_, name, equipment in self.SEEDS:
+            WgerExercise.objects.create(id=id_, name=name, category_name="Back", equipment_name=equipment)
+
+    def _names(self, location):
+        from .services import workout_generator as gen
+        return {ex.name for ex in gen._safe_candidates("Back", location)}
+
+    def test_home_gets_dumbbell_band_and_bodyweight_back_exercises(self):
+        names = self._names("home")
+        self.assertEqual(
+            names,
+            {"DB Single-Arm Row (5kg)", "Bent Over Dumbbell Rows", "Band pull-aparts", "Superman"},
+        )
+
+    def test_gym_also_gets_pulldown_variants(self):
+        names = self._names("gym")
+        self.assertIn("Neutral Grip Lat Pulldown", names)
+        self.assertIn("Close-grip Lat Pull Down", names)
+
+    def test_barbell_pullups_mobility_and_olympic_moves_stay_out(self):
+        for location in ("home", "gym"):
+            names = self._names(location)
+            for blocked in ("Barbell Row (Overhand)", "Pull-ups", "Cat-Cow", "Dumbbell Hang Power Cleans"):
+                self.assertNotIn(blocked, names)

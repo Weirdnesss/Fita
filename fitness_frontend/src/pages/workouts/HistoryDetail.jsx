@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { getHistoryDetail, kgToLb } from "../../api/workouts";
+import { formatSeconds } from "../../lib/formatSets";
+import StickyBar from "../../components/StickyBar";
 
 export default function HistoryDetail() {
   const { id } = useParams();
@@ -34,7 +36,7 @@ export default function HistoryDetail() {
         backTo="/workouts"
       />
       <ErrorBanner message={error} />
-
+      <StickyBar>
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 24 }}>
           <MiniStat label="Duration" value={`${history.duration_minutes} min`} />
@@ -42,6 +44,7 @@ export default function HistoryDetail() {
           <MiniStat label="Sets" value={history.total_sets} />
         </div>
       </div>
+      </StickyBar>
 
       {history.note && (
         <div className="card" style={{ marginBottom: 16 }}>
@@ -51,36 +54,50 @@ export default function HistoryDetail() {
       )}
 
       {history.performed_exercises.map((ex) => {
-        // sets_data.weight and total_volume are always stored/computed
-        // in kg; convert to the unit that was actually displayed when
-        // this exercise was logged. Individual sets prefer
-        // display_weight (the exact number the user typed, saved
-        // alongside the kg value) so there's no lb<->kg round-trip
-        // rounding on redisplay -- older history logged before that
-        // field existed falls back to converting the kg value.
+        // What was logged depends on the exercise's input type. For
+        // weight_reps, sets_data.weight and total_volume are always stored
+        // in kg; convert to the unit that was displayed when it was logged.
+        // Individual sets prefer display_weight (the exact number typed)
+        // so there's no lb<->kg rounding on redisplay -- older history
+        // without that field falls back to converting the kg value.
+        const type = ex.input_type || "weight_reps";
         const isLb = ex.weight_unit === "lb";
         const displayVolume = isLb ? kgToLb(ex.total_volume) : ex.total_volume;
+        const totalReps = ex.sets_data.reduce((sum, s) => sum + (s.reps || 0), 0);
+        const totalSeconds = ex.sets_data.reduce((sum, s) => sum + (s.seconds || 0), 0);
+
+        const pill =
+          type === "time"
+            ? `${formatSeconds(totalSeconds)} total`
+            : type === "reps"
+            ? `${totalReps} total reps`
+            : `${displayVolume} ${ex.weight_unit} volume`;
+        const cols = type === "weight_reps" ? "24px 1fr 1fr" : "24px 1fr";
 
         return (
           <div key={ex.id} className="card" style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
               <p style={{ fontWeight: 600 }}>{ex.exercise_name}</p>
-              <span className="pill pill-bamboo">{displayVolume} {ex.weight_unit} volume</span>
+              <span className="pill pill-bamboo">{pill}</span>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr", gap: 8, fontSize: 11, color: "var(--text-faint)", marginBottom: 6 }}>
+            <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, fontSize: 11, color: "var(--text-faint)", marginBottom: 6 }}>
               <span>#</span>
-              <span>Weight ({ex.weight_unit})</span>
-              <span>Reps</span>
+              {type === "weight_reps" && <span>Weight ({ex.weight_unit})</span>}
+              {type !== "time" && <span>Reps</span>}
+              {type === "time" && <span>Time</span>}
             </div>
 
             {ex.sets_data.map((set, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr", gap: 8, alignItems: "center", marginBottom: 6 }}>
+              <div key={i} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "center", marginBottom: 6 }}>
                 <span className="stat" style={{ fontSize: 13, color: "var(--text-dim)" }}>{i + 1}</span>
-                <span style={{ fontSize: 14 }}>
-                  {set.display_weight !== undefined ? set.display_weight : (isLb ? kgToLb(set.weight) : set.weight)}
-                </span>
-                <span style={{ fontSize: 14 }}>{set.reps}</span>
+                {type === "weight_reps" && (
+                  <span style={{ fontSize: 14 }}>
+                    {set.display_weight !== undefined ? set.display_weight : (isLb ? kgToLb(set.weight) : set.weight)}
+                  </span>
+                )}
+                {type !== "time" && <span style={{ fontSize: 14 }}>{set.reps}</span>}
+                {type === "time" && <span style={{ fontSize: 14 }}>{formatSeconds(set.seconds)}</span>}
               </div>
             ))}
           </div>

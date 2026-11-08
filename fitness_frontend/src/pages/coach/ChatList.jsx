@@ -5,6 +5,7 @@ import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../com
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 import { listChats, createChat, deleteChat } from "../../api/coach";
+import StickyBar from "../../components/StickyBar";
 
 const CHATS_PAGE_SIZE = 6;
 
@@ -51,13 +52,13 @@ export default function ChatList() {
     <div className="page">
       <PageHeader title="Fitness Assistant" subtitle="Chat for explanations and recommendations" />
       <ErrorBanner message={error} />
-
+      <StickyBar>
       <div className="page-actions">
         <button className="btn btn-primary btn-block" onClick={handleNewChat} disabled={creating}>
           {creating ? "Starting..." : "+ New Chat"}
         </button>
       </div>
-
+      </StickyBar>
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
           <h3>Previous Chats</h3>

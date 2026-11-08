@@ -10,6 +10,7 @@ import { useProfileStats } from "../lib/useProfileStats";
 import SettingsButton from "../components/SettingsButton";
 import { nextReportInfo } from "../lib/reports";
 import { usePwaInstall } from "../lib/pwaInstall";
+import { useActiveWorkout } from "../lib/activeWorkout";
 
 export default function ProfilePage() {
   const { user, loading, logout } = useAuth();
@@ -17,6 +18,7 @@ export default function ProfilePage() {
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const { stats, latestReport, reportSettings, statsLoading } = useProfileStats();
   const nextReport = nextReportInfo(reportSettings);
+  const activeWorkout = useActiveWorkout(); // a workout in progress on this device, or null
   const overCalories = stats.calorieTarget > 0 && stats.caloriesToday > stats.calorieTarget;
 
   if (loading) return <div className="page"><Loading /></div>;
@@ -36,7 +38,23 @@ export default function ProfilePage() {
     <div className="page">
       <PageHeader
         title="Profile"
-        action={<SettingsButton to="/profile/edit" label="Edit profile" />}
+        action={
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <SettingsButton to="/profile/edit" label="Edit profile" />
+            <button
+              onClick={() => setConfirmingLogout(true)}
+              aria-label="Log out"
+              title="Log out"
+              style={{ background: "none", border: "none", color: "var(--chili)", padding: 8, display: "flex" }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="M16 17l5-5-5-5" />
+                <path d="M21 12H9" />
+              </svg>
+            </button>
+          </div>
+        }
       />
 
       {incomplete && (
@@ -65,31 +83,30 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {stats.calorieTarget > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div className="progress-track">
+                  <div
+                    className="progress-fill"
+                    style={{
+                      width: `${Math.min(100, (stats.caloriesToday / stats.calorieTarget) * 100)}%`,
+                      "--accent-color": overCalories ? "var(--chili)" : "var(--bamboo)",
+                    }}
+                  />
+                </div>
+                <span className="stat" style={{ fontSize: 12, color: overCalories ? "var(--chili)" : "var(--text-dim)" }}>
+                  {overCalories
+                    ? `${stats.caloriesToday - stats.calorieTarget} kcal over today`
+                    : `${stats.calorieTarget - stats.caloriesToday} kcal left today`}
+                </span>
+              </div>
+            )}
+
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-              <StatBox label="This week" value={stats.workoutsThisWeek} unit="workouts" accent="bamboo" onClick={() => navigate("/workouts")} />
+              <StatBox label="This week" value={stats.workoutsThisWeek} unit="workouts" accent="bamboo" />
               <StatBox label="Log Streak" value={stats.streak} unit="days" accent="turmeric" />
               <StatBox label="Workout streak" value={stats.workoutStreak} unit="days" accent="ube" />
             </div>
-
-{stats.calorieTarget > 0 && (
-  <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-      <span className="eyebrow">Today's calories</span>
-      <span className="stat" style={{ fontSize: 12, color: overCalories ? "var(--chili)" : "var(--text-dim)" }}>
-        {stats.caloriesToday} / {stats.calorieTarget} kcal
-      </span>
-    </div>
-    <div className="progress-track">
-      <div
-        className="progress-fill"
-        style={{
-          width: `${Math.min(100, (stats.caloriesToday / stats.calorieTarget) * 100)}%`,
-          "--accent-color": overCalories ? "var(--chili)" : "var(--bamboo)",
-        }}
-      />
-    </div>
-  </div>
-)}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
             <LinkRow
@@ -108,16 +125,6 @@ export default function ProfilePage() {
         <div className="profile-col-right">
           <WeightProgress />
         </div>
-      </div>
-
-      <div className="page-actions">
-        <button
-          className="btn btn-secondary btn-block"
-          style={{ color: "var(--chili)" }}
-          onClick={() => setConfirmingLogout(true)}
-        >
-          Log Out
-        </button>
       </div>
 
       <ConfirmDialog

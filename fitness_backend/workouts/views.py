@@ -7,26 +7,32 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from datetime import timedelta
 
-from .models import PerformedExercise, TemplateExercise, TemplateHistory, WeightUnit, WgerExercise, WorkoutTemplate
+from .models import InputType, PerformedExercise, TemplateExercise, TemplateHistory, WeightUnit, WgerExercise, WorkoutTemplate
 from .serializers import (
     FinishWorkoutSerializer,
     TemplateHistorySerializer,
     WorkoutTemplateSerializer,
 )
 from .services.workout_generator import (
+    MAX_SETS,
     WorkoutGenerationNotNeededError,
     WorkoutGeneratorError,
     generate_workout,
+    get_addable_exercises,
     get_generation_eligibility,
     get_medical_condition_note,
+    infer_input_type,
     swap_exercise,
+    suggest_exercise_for_template
 )
 
 
 GENERATED_TEMPLATE_ERROR = {
-    "error": "Generated routines can't be edited directly. Delete it and tap Generate again for a new one."
+    "error": "Generated routines can't be edited directly. You can swap, add, or remove individual exercises."
 }
 
+MIN_GENERATED_EXERCISES = 1
+MAX_GENERATED_EXERCISES = 15
 MIN_TARGET_SETS = 1
 MAX_TARGET_SETS = 10
 
@@ -190,8 +196,6 @@ class AddExerciseToTemplateView(APIView):
         template = get_object_or_404(
             WorkoutTemplate, id=template_id, user=request.user
         )
-        if template.is_generated:
-            return Response(GENERATED_TEMPLATE_ERROR, status=status.HTTP_403_FORBIDDEN)
 
         wger_exercise_id = request.data.get("wger_exercise_id")
         if not wger_exercise_id:
@@ -221,6 +225,22 @@ class AddExerciseToTemplateView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        if template.is_generated:
+            if template.exercises.count() >= MAX_GENERATED_EXERCISES:
+                return Response(
+                    {"error": f"A routine can have at most {MAX_GENERATED_EXERCISES} exercises."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            _, allowed = get_addable_exercises(template)
+            if wger_exercise_id not in {ex.id for ex in allowed}:
+                return Response(
+                    {"error": "That exercise can't be added to this routine."},
+                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+            # Keep set count consistent with the generated plan.
+            first = template.exercises.first()
+            target_sets = first.target_sets if first else MAX_SETS
+
         weight_unit = request.data.get("weight_unit")
         if weight_unit not in (WeightUnit.KG, WeightUnit.LB):
             weight_unit = (
@@ -229,7 +249,7 @@ class AddExerciseToTemplateView(APIView):
                 else WeightUnit.KG
             )
 
-        exercise = template.exercises.create(
+        template.exercises.create(
             wger_exercise_id=wger_exercise_id,
             exercise_name=cached.name,
             category_name=cached.category_name,
@@ -237,12 +257,98 @@ class AddExerciseToTemplateView(APIView):
             target_sets=target_sets,
             order=template.exercises.count(),
             weight_unit=weight_unit,
+            input_type=infer_input_type(cached.name, cached.category_name, cached.equipment_name),
         )
         return Response(
             WorkoutTemplateSerializer(template).data,
             status=status.HTTP_201_CREATED,
         )
 
+class TemplateExerciseSuggestionsView(APIView):
+    """
+    GET /workouts/templates/<template_id>/exercises/suggestions/?category=Chest&q=press
+    Beginner-safe exercises the user can add to a GENERATED template --
+    the picker for generated routines uses this instead of the global
+    exercise search. Same result shape as ExerciseSearchView, plus the
+    categories available for this routine's day-type (for filter chips).
+    Not paginated: the safe pool per day-type is small.
+    """
+
+    def get(self, request, template_id):
+        template = get_object_or_404(
+            WorkoutTemplate, id=template_id, user=request.user
+        )
+        if not template.is_generated:
+            return Response(
+                {"error": "Suggestions are only for generated routines. Use the exercise search instead."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        categories, results = get_addable_exercises(
+            template,
+            category=request.query_params.get("category", "").strip(),
+            term=request.query_params.get("q", "").strip(),
+        )
+        return Response({
+            "categories": categories,
+            "results": [
+                {
+                    "wger_exercise_id": ex.id,
+                    "name": ex.name,
+                    "description": ex.description,
+                    "category": ex.category_name,
+                    "equipment": ex.equipment_name,
+                    "muscles": ex.muscle_names,
+                }
+                for ex in results
+            ],
+        })
+
+class SuggestExerciseView(APIView):
+    """
+    POST /workouts/templates/<template_id>/exercises/suggest/
+    Adds one auto-picked beginner-safe exercise to a GENERATED template
+    (see suggest_exercise_for_template). The user can remove it afterward.
+    Response: the updated template.
+    """
+
+    def post(self, request, template_id):
+        template = get_object_or_404(
+            WorkoutTemplate, id=template_id, user=request.user
+        )
+        if not template.is_generated:
+            return Response(
+                {"error": "Suggestions are only for generated routines."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if template.exercises.count() >= MAX_GENERATED_EXERCISES:
+            return Response(
+                {"error": f"A routine can have at most {MAX_GENERATED_EXERCISES} exercises."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            picked = suggest_exercise_for_template(template)
+        except WorkoutGeneratorError as e:
+            return Response({"error": str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        first = template.exercises.first()
+        template.exercises.create(
+            wger_exercise_id=picked.id,
+            exercise_name=picked.name,
+            category_name=picked.category_name,
+            equipment_name=picked.equipment_name,
+            target_sets=first.target_sets if first else MAX_SETS,
+            order=template.exercises.count(),
+            weight_unit=(
+                WeightUnit.LB if "dumbbell" in picked.equipment_name.lower() else WeightUnit.KG
+            ),
+            input_type=infer_input_type(picked.name, picked.category_name, picked.equipment_name),
+        )
+        return Response(
+            WorkoutTemplateSerializer(template).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 class TemplateExerciseDetailView(APIView):
     """
@@ -263,16 +369,16 @@ class TemplateExerciseDetailView(APIView):
         )
         return template, exercise
 
+    # weight_unit and input_type are logging preferences, not changes to the
+    # routine itself, so both stay editable on generated routines
+    # (target_sets is not).
+    GENERATED_EDITABLE = {"weight_unit", "input_type"}
+
     def patch(self, request, template_id, exercise_id):
         template, exercise = self.get_exercise(request, template_id, exercise_id)
 
-        # Generated templates block edits in general (see
-        # GENERATED_TEMPLATE_ERROR), but weight_unit is deliberately
-        # exempted -- it's a per-session display preference, not a change
-        # to the routine itself, so it stays editable on generated
-        # routines like target_sets is not.
-        is_only_weight_unit = set(request.data.keys()) <= {"weight_unit"}
-        if template.is_generated and not is_only_weight_unit:
+        only_logging_prefs = set(request.data.keys()) <= self.GENERATED_EDITABLE
+        if template.is_generated and not only_logging_prefs:
             return Response(GENERATED_TEMPLATE_ERROR, status=status.HTTP_403_FORBIDDEN)
 
         update_fields = []
@@ -296,19 +402,31 @@ class TemplateExerciseDetailView(APIView):
             exercise.weight_unit = weight_unit
             update_fields.append("weight_unit")
 
+        if "input_type" in request.data:
+            input_type = request.data.get("input_type")
+            if input_type not in InputType.values:
+                return Response(
+                    {"error": f"input_type must be one of {list(InputType.values)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            exercise.input_type = input_type
+            update_fields.append("input_type")
+
         if not update_fields:
             return Response(
-                {"error": "Provide target_sets and/or weight_unit to update"},
+                {"error": "Provide target_sets, weight_unit and/or input_type to update"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         exercise.save(update_fields=update_fields)
         return Response(WorkoutTemplateSerializer(template).data)
-
     def delete(self, request, template_id, exercise_id):
         template, exercise = self.get_exercise(request, template_id, exercise_id)
-        if template.is_generated:
-            return Response(GENERATED_TEMPLATE_ERROR, status=status.HTTP_403_FORBIDDEN)
+        if template.is_generated and template.exercises.count() <= MIN_GENERATED_EXERCISES:
+            return Response(
+                {"error": "A routine needs at least one exercise. Delete the routine instead if you don't want it."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         exercise.delete()
 
         remaining = template.exercises.order_by("order", "id")
@@ -349,6 +467,7 @@ class WorkoutHistoryView(generics.ListAPIView):
                 history=history,
                 exercise_name=ex.get("exercise_name", ""),
                 sets_data=ex.get("sets_data", []),
+                input_type=ex.get("input_type") or InputType.WEIGHT_REPS,
                 weight_unit=ex.get("weight_unit") or WeightUnit.KG,
             )
         return Response(
@@ -591,23 +710,28 @@ class ExerciseFrequencyView(APIView):
         )
         return Response([{"name": r["exercise_name"], "sessions": r["sessions"]} for r in rows])
 
-
 class ExerciseProgressionView(APIView):
     """
     GET /workouts/trends/exercise/?name=<exercise name>&period=month|3months|all
-    One exercise's per-session progression: for each session that
-    included it, the heaviest set logged (weight + the reps done at that
-    weight) and the total number of sets. This is deliberately simpler
-    than an estimated-1RM formula -- "your heaviest set each session" is
-    something a beginner can read at a glance, where a 1RM formula needs
-    explaining and can be misleading at high rep counts anyway.
+    One exercise's per-session progression. What counts as "best" depends on
+    how the exercise is logged (the most recent entry's input_type decides):
+      weight_reps -> heaviest set (weight + the reps done at that weight)
+      reps        -> most reps in a single set
+      time        -> longest single set, in seconds
+    This is deliberately simpler than an estimated-1RM formula -- "your best
+    set each session" is something a beginner can read at a glance.
 
     period uses a longer window than the main trends view (30/90 days,
-    or all-time) since meaningful strength progression usually isn't
-    visible over just 7 days.
+    or all-time) since meaningful progression usually isn't visible over
+    just 7 days.
     """
 
     PERIOD_DAYS = {"month": 30, "3months": 90}  # "all" is handled separately (no date filter)
+    METRIC_FIELD = {
+        InputType.WEIGHT_REPS: "top_weight",
+        InputType.REPS: "top_reps",
+        InputType.TIME: "top_seconds",
+    }
 
     def get(self, request):
         exercise_name = request.query_params.get("name")
@@ -629,16 +753,29 @@ class ExerciseProgressionView(APIView):
             cutoff = timezone.localdate() - timedelta(days=self.PERIOD_DAYS[period] - 1)
             performed = performed.filter(history__started_at__date__gte=cutoff)
 
+        input_type = InputType.WEIGHT_REPS
         sessions_by_date = {}
         for p in performed.order_by("history__started_at"):
+            input_type = p.input_type  # ends as the most recent entry's type
             d = timezone.localtime(p.history.started_at).date()
             session = sessions_by_date.setdefault(
-                d, {"date": d.isoformat(), "top_weight": 0, "top_weight_reps": 0, "total_sets": 0}
+                d,
+                {
+                    "date": d.isoformat(),
+                    "top_weight": 0,
+                    "top_weight_reps": 0,
+                    "top_reps": 0,
+                    "top_seconds": 0,
+                    "total_sets": 0,
+                },
             )
             for s in p.sets_data:
                 weight = s.get("weight") or 0
                 reps = s.get("reps") or 0
+                seconds = s.get("seconds") or 0
                 session["total_sets"] += 1
+                session["top_reps"] = max(session["top_reps"], reps)
+                session["top_seconds"] = max(session["top_seconds"], seconds)
                 # "Heaviest set" -- ties broken by more reps at that weight,
                 # since that's still meaningfully more work done.
                 if weight > session["top_weight"] or (
@@ -647,10 +784,17 @@ class ExerciseProgressionView(APIView):
                     session["top_weight"] = weight
                     session["top_weight_reps"] = reps
 
-        sessions = sorted(sessions_by_date.values(), key=lambda s: s["date"])
+        # Sessions logged under a different input type (the user switched it
+        # later) have nothing to chart for this metric, so they're skipped.
+        metric = self.METRIC_FIELD[input_type]
+        sessions = sorted(
+            (s for s in sessions_by_date.values() if input_type == InputType.WEIGHT_REPS or s[metric] > 0),
+            key=lambda s: s["date"],
+        )
 
         return Response({
             "exercise": exercise_name,
             "period": period,
+            "input_type": input_type,
             "sessions": sessions,
         })

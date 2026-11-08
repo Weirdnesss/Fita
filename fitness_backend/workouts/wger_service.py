@@ -85,22 +85,34 @@ class WgerService:
     @classmethod
     def get_exercise_detail(cls, wger_exercise_id):
         """
-        Full detail for a single exercise (description, muscles,
-        equipment) -- used when adding an exercise to a template so we
-        can store category/equipment names locally.
+        Full detail for a single exercise, including available videos.
         """
         data = cls._get(f"exerciseinfo/{wger_exercise_id}")
+
         translations = data.get("translations", [])
         english = next(
             (t for t in translations if t.get("language") == DEFAULT_LANGUAGE),
             translations[0] if translations else {},
         )
+
         category = data.get("category", {}) or {}
         equipment_list = data.get("equipment", []) or []
+        videos = data.get("videos", []) or []
+
         return {
             "wger_exercise_id": wger_exercise_id,
             "name": english.get("name", "Unknown Exercise"),
             "description": english.get("description", ""),
             "category_name": category.get("name", ""),
-            "equipment_name": ", ".join(e.get("name", "") for e in equipment_list),
+            "equipment_name": ", ".join(
+                e.get("name", "") for e in equipment_list
+            ),
+            "videos": [
+                {
+                    "url": video.get("video"),
+                    "name": video.get("name", ""),
+                }
+                for video in videos
+                if video.get("video")
+            ],
         }

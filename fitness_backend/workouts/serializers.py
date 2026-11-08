@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import PerformedExercise, TemplateExercise, TemplateHistory, WeightUnit, WorkoutTemplate
+from .models import InputType, PerformedExercise, TemplateExercise, TemplateHistory, WeightUnit, WorkoutTemplate
 
 
 class TemplateExerciseSerializer(serializers.ModelSerializer):
@@ -16,6 +16,7 @@ class TemplateExerciseSerializer(serializers.ModelSerializer):
             "target_sets",
             "order",
             "weight_unit",
+            "input_type",
         ]
 
 
@@ -37,6 +38,7 @@ class PerformedExerciseSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "exercise_name",
+            "input_type",
             "sets_data",
             "weight_unit",
             "total_sets_performed",
@@ -66,21 +68,39 @@ class TemplateHistorySerializer(serializers.ModelSerializer):
 
 
 class LoggedSetSerializer(serializers.Serializer):
-    """One logged set. weight is always kg by the time it reaches here
-    (the frontend converts lb entries before submitting) -- display_weight
-    is the exact number the user typed, in whatever unit was shown, kept
-    so history can redisplay it precisely instead of round-tripping
-    through a unit conversion and picking up rounding error."""
+    """One logged set. Which fields are required depends on the exercise's
+    input_type (checked in PerformedExerciseInputSerializer.validate).
+    weight is always kg by the time it reaches here (the frontend converts
+    lb entries before submitting) -- display_weight is the exact number the
+    user typed, kept so history can redisplay it without round-trip error."""
 
-    weight = serializers.FloatField(min_value=0)
-    reps = serializers.IntegerField(min_value=1)
+    weight = serializers.FloatField(min_value=0, required=False)
+    reps = serializers.IntegerField(min_value=1, required=False)
+    seconds = serializers.IntegerField(min_value=1, max_value=7200, required=False)
     display_weight = serializers.FloatField(min_value=0, required=False)
+
+
+REQUIRED_SET_FIELDS = {
+    InputType.WEIGHT_REPS: ("weight", "reps"),
+    InputType.REPS: ("reps",),
+    InputType.TIME: ("seconds",),
+}
 
 
 class PerformedExerciseInputSerializer(serializers.Serializer):
     exercise_name = serializers.CharField(max_length=200)
+    input_type = serializers.ChoiceField(choices=InputType.choices, required=False, default=InputType.WEIGHT_REPS)
     weight_unit = serializers.ChoiceField(choices=WeightUnit.choices, required=False, default=WeightUnit.KG)
     sets_data = LoggedSetSerializer(many=True, required=False, default=list)
+
+    def validate(self, attrs):
+        needed = REQUIRED_SET_FIELDS[attrs.get("input_type", InputType.WEIGHT_REPS)]
+        for s in attrs.get("sets_data", []):
+            if any(field not in s for field in needed):
+                raise serializers.ValidationError(
+                    {"sets_data": f"Each set needs: {', '.join(needed)}."}
+                )
+        return attrs
 
 
 class FinishWorkoutSerializer(serializers.Serializer):
@@ -102,13 +122,8 @@ class FinishWorkoutSerializer(serializers.Serializer):
         return value
 
     def validate_exercises(self, value):
-        # Each exercise's sets_data has already been type/range-checked
-        # by LoggedSetSerializer at this point (weight is a non-negative
-        # number, reps is a positive integer) -- a malformed or malicious
-        # request never reaches the database. What's left here is just
-        # dropping exercises with nothing logged: an exercise that was
-        # added to the workout but never actually logged shouldn't be
-        # saved as a PerformedExercise row.
+        # An exercise that was added to the workout but never logged
+        # shouldn't be saved as a PerformedExercise row.
         with_sets = [ex for ex in value if ex.get("sets_data")]
         if not with_sets:
             raise serializers.ValidationError(

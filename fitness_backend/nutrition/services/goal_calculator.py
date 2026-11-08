@@ -18,7 +18,7 @@ is exactly what a fixed formula gives you and an LLM does not.
 
     Calorie target = TDEE, adjusted by goal:
         lose_weight              TDEE - 500, capped at 20% of TDEE  (~0.5 kg/week deficit)
-        gain_weight / gain_muscle TDEE + 350  (lean surplus)
+        gain_weight / gain_muscle TDEE + 250  (lean surplus)
         build_strength / maintain TDEE
 
 Safety floors: never suggests below 1500 kcal (male) / 1200 kcal (female)
@@ -41,23 +41,34 @@ ACTIVITY_MULTIPLIERS = {
     "very_active": 1.725,
 }
 
+# Mifflin-St Jeor x activity multipliers tend to overestimate energy needs,
+# and beginners often overrate their own activity level. A small flat
+# reduction keeps beginner targets on the conservative side. One constant,
+# so it's easy to explain, validate with nutritionists, and tune.
+BEGINNER_TDEE_FACTOR = 0.95
+
 GOAL_CALORIE_ADJUSTMENT = {
     "lose_weight": -500,
-    "gain_weight": 350,
-    "gain_muscle": 350,
+    "gain_weight": 250,
+    "gain_muscle": 250,
     "build_strength": 0,
     "maintain_weight": 0,
 }
 
-# g of protein per kg of bodyweight -- higher for cutting/building goals to
-# help preserve/build lean mass, per standard sports-nutrition guidance.
+# g of protein per kg of bodyweight. Deliberately set at the lower end of
+# the evidence-based range for gym-goers: beginners respond well to modest
+# intakes and don't need the targets used for experienced lifters.
 PROTEIN_G_PER_KG = {
-    "lose_weight": 2.0,
-    "gain_muscle": 1.8,
-    "build_strength": 1.8,
-    "gain_weight": 1.6,
-    "maintain_weight": 1.6,
+    "lose_weight": 1.4,
+    "gain_muscle": 1.4,
+    "build_strength": 1.2,
+    "gain_weight": 1.2,
+    "maintain_weight": 1.2,
 }
+
+# Protein is calculated from the lower of actual weight and the weight at
+# this BMI, so a heavier beginner's target isn't inflated by body fat.
+PROTEIN_BASIS_BMI = 25
 
 # Fat as a % of total calories, varied by goal:
 #   - Muscle/strength goals lean lower-fat to free up carbs for training
@@ -147,7 +158,7 @@ def calculate_goals(profile) -> GoalCalculationResult:
     if not profile.activity_level:
         assumptions.append("No activity level set -- assumed Sedentary.")
     multiplier = ACTIVITY_MULTIPLIERS[activity_level]
-    tdee = bmr * multiplier
+    tdee = bmr * multiplier * BEGINNER_TDEE_FACTOR
 
     goal = profile.primary_goal or "maintain_weight"
     if not profile.primary_goal:
@@ -179,7 +190,14 @@ def calculate_goals(profile) -> GoalCalculationResult:
             f"Calculated deficit went below a safe minimum, so calories were capped at {calorie_floor} kcal."
         )
 
-    protein_g = PROTEIN_G_PER_KG[goal] * weight_kg
+    healthy_weight_kg = PROTEIN_BASIS_BMI * (height_cm / 100) ** 2
+    protein_basis_kg = min(weight_kg, healthy_weight_kg)
+    if protein_basis_kg < weight_kg:
+        assumptions.append(
+            "Protein was based on a weight in the healthy BMI range rather than your "
+            "full bodyweight, so the target isn't inflated."
+        )
+    protein_g = PROTEIN_G_PER_KG[goal] * protein_basis_kg
     max_protein_g = calories * MAX_PROTEIN_CALORIE_FRACTION / 4
     if protein_g > max_protein_g:
         protein_g = max_protein_g

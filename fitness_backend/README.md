@@ -84,6 +84,40 @@ Results, cross-check each item against PhilFCT's online lookup or your FOI
 response and update the `source` field. Add new foods either through
 /admin/ or by extending nutrition/management/commands/seed_foods.py.
 
+### More food data + meal suggestions
+PhilFCT doesn't cover every common food, so the database also takes data from
+other sources. Every row records where it came from (`source`, `external_id`),
+search ranks PhilFCT first, and the API returns `source_type` / `source_label`
+(`philfct`, `usda`, `openfoodfacts`, `user`, `estimated`).
+
+- `python manage.py import_usda --dir <unzipped FDC folder> [--dir ...] [--skip-existing-names] [--dry-run]`
+  -- USDA FoodData Central (public domain). Download the SR Legacy and
+  Foundation Foods CSVs from https://fdc.nal.usda.gov/download-datasets.
+- `python manage.py import_openfoodfacts [--max-pages 10]` -- Philippine
+  packaged products from Open Food Facts (ODbL; keep attribution). Rate
+  limited to roughly one request per 7 s by default.
+- POST   /foods/custom/ -- a user adds a missing food (private to them),
+  PATCH/DELETE /foods/custom/<id>/ to edit it (delete refused once logged)
+- GET    /suggestions/?meal_type=lunch&date=2026-10-19&limit=4&explain=true&exclude=12,40
+  (`exclude` = food ids already shown, for "show different ideas")
+  -- foods that fit what's left of today's goals. Candidates and portions are
+  chosen by rule from the database; the LLM (optional, Groq) only picks among
+  them by id and words the reason, and any failure falls back to rule-based
+  reasons (`reason_source`: "ai" | "rule"). Log a suggestion with the normal
+  POST /entries/ using its `food.id` and `servings`. Portions are capped per
+  food category (e.g. 150 g for meat/fish) so a suggestion looks like a real serving.
+  The React screens are `FoodSuggestions.jsx` (Meal Ideas) and `CustomFoodForm.jsx`.
+- GET    /suggestions/meals/?meal_type=lunch&date=2026-10-19&limit=3&explain=true&exclude=12,40
+  -- whole plates (a protein plus a carb and a vegetable or fruit, 2-3 foods)
+  sized to what's left today. Same hybrid rule: plates are built by rule
+  (`nutrition/services/meal_builder.py`); the LLM only picks plates by index and
+  words the reason. Response: `meals: [{items: [{food, role, servings,
+  amount_label, calories, ...}], totals, reason, reason_source}]`. `exclude`
+  skips plates whose main food was already shown.
+- POST   /entries/bulk/ `{meal_type, date, items: [{food_item, servings}]}`
+  -- logs a whole plate atomically (all or nothing, max 10 items). Foods
+  created by other users are refused (same visibility rule as /entries/).
+
 ## Fitness Assistant module (/coach/)
 Uses Groq's free-tier, OpenAI-compatible LLM API (openai/gpt-oss-120b
 by default -- Groq's recommended replacement for the now-deprecated
@@ -153,6 +187,47 @@ list). Populate entries via /admin/.
 
 - GET /resources/?category=workout&q=beginner   -- list, with optional
   category ("workout"|"nutrition"|"general") and title-search filters
+
+### Validation packet for expert review
+
+Reviewers sign off on the rules and the data, not on each suggestion. This command writes
+everything they need, generated from the live code so it cannot drift from what the app does:
+
+    python manage.py export_validation_packet              # writes ./validation_packet/
+    python manage.py export_validation_packet --out review # or pick a folder
+
+- `rules.md`: every rule and number behind the suggestions, with a **rules fingerprint**
+  (cite it as "validated rules <fingerprint>"; it changes whenever any rule or number changes).
+  It includes the **common-foods list** (section 9): suggestions are ranked towards foods people
+  here actually eat (chicken, tilapia, rice, kangkong...) and away from rare ingredients and
+  high-sodium dried/salted fish; balut, ant eggs and powders/canned items are never suggested.
+  Deli and factory meats (bologna, nuggets, fish balls) and organ meats (liver, tripe, blood) are
+  ranked lower and never boosted, but not banned; these are judgment calls for the reviewer.
+  The list lives in `nutrition/services/staples.py`; edit it there and regenerate.
+  Breakfast plates rank eggs, tofu, yogurt, milk, tapa/tocino/longganisa and pandesal, bread, oats,
+  rice, camote and corn first, never offer canned fish or canned corn/starch, allow up to 340 kcal
+  per 100 g for the carb (bread), and mix food groups so one group (dozens of USDA cheeses) cannot
+  take every slot: at most `limit // 3` plates share a main-item group (a preference, filled up if
+  the database is thin). The lists are the `prefer` fields of `BREAKFAST_PROTEIN` /
+  `BREAKFAST_CARB` in `nutrition/services/meal_builder.py`; rules.md section 4 prints them.
+- `estimated_foods.csv`: foods that cite no published table (PhilFCT, USDA or Open Food Facts),
+  most-used-in-plates first, with empty verdict columns for the reviewer.
+- `sample_plates.csv`: plates for 5 calorie goals x 4 meals, each audited independently
+  (`flags` column: too small for the meal, over the calories left, over a plate portion
+  limit, calories that don't match the macros, a food not on the common-foods list; the
+  `common_food` column says yes/no per food).
+- `raw_looking_foods.csv`: foods left out of suggestions because their name does not say how
+  they were prepared. PhilFCT lists raw foods under plain names ("Tilapia", "Chicken white
+  meat", "Potato"), and raw chicken or pork must never be suggested. Scan it for anything that is
+  actually cooked and was dropped by mistake (common-sounding names are listed first). Foods whose
+  name literally says raw or uncooked are not listed (summary.md gives their count), and Open Food
+  Facts products are never treated as raw because they are packaged retail items.
+- `summary.md`: counts, flags and the fingerprint on one page.
+
+Run it on the database you actually ship (after the imports), not on a test database. It
+writes nothing to the database (sample plates are built for a throwaway user and rolled back).
+After changing any rule, rerun it: a different fingerprint means the earlier sign-off no
+longer applies to the new rules.
 
 ## Testing
 Each app has a `tests.py` covering auth requirements, cross-user data

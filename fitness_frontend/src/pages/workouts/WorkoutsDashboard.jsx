@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
 import { listTemplates, listHistory, deleteTemplate, generateWorkout, getGenerationEligibility } from "../../api/workouts";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
 import WorkoutTrendsPanel from "./WorkoutTrendsPanel";
+import WorkoutPreviewSheet from "./WorkoutPreviewSheet";
+import { useActiveWorkout } from "../../lib/activeWorkout";
+import StickyBar from "../../components/StickyBar";
 
 // Generated routines cap at 6 forever (one per day-type -- see
 // workouts/models.py's one_generated_template_per_day_type_per_user
@@ -42,12 +45,44 @@ const GENERATE_COPY = {
 export default function WorkoutsDashboard() {
   const navigate = useNavigate();
   const showToast = useToast();
+  const activeWorkout = useActiveWorkout(); // the workout in progress, if any
   const [templates, setTemplates] = useState(null);
   const [history, setHistory] = useState(null);
   const [eligibility, setEligibility] = useState(null); // { eligible, next_eligible_at } | null (unknown)
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [confirmingGenerate, setConfirmingGenerate] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null); // { id, title } | null
+  // The start sheet lives in the router's history state (not component state), so the phone's
+  // back gesture closes it instead of leaving the page.
+  const location = useLocation();
+  const previewRoutine = location.state?.startSheet ?? null; // { id, title } | null
+  const closingSheet = useRef(false);
+  useEffect(() => {
+    closingSheet.current = false;
+  }, [previewRoutine]);
+  // The tab bar is pinned under the page header; its height is published as
+  // --workouts-tabs-h so the Trends period selector can pin right below it.
+  const tabsRef = useRef(null);
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty("--workouts-tabs-h", `${el.offsetHeight}px`);
+    publish();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(publish) : null;
+    observer?.observe(el);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty("--workouts-tabs-h");
+    };
+  }, []);
+  const openStartSheet = (routine) => navigate(location.pathname, { state: { startSheet: routine } });
+  const closeStartSheet = () => {
+    if (closingSheet.current) return; // a double tap must not go back twice
+    closingSheet.current = true;
+    navigate(-1);
+  };
   const [filter, setFilter] = useState("all"); // "all" | "own" | "generated"
   const [medicalNote, setMedicalNote] = useState(null);
   const [visibleCount, setVisibleCount] = useState(TEMPLATES_PAGE_SIZE);
@@ -146,45 +181,61 @@ export default function WorkoutsDashboard() {
         </div>
       )}
 
-      <div className="tab-bar">
-        <button
-          className={`tab-btn${activeTab === "routines" ? " active" : ""}`}
-          onClick={() => setActiveTab("routines")}
-        >
-          Routines{templates ? ` (${templates.length})` : ""}
-        </button>
-        <button
-          className={`tab-btn${activeTab === "history" ? " active" : ""}`}
-          onClick={() => setActiveTab("history")}
-        >
-          History{history ? ` (${history.length})` : ""}
-        </button>
-        <button
-          className={`tab-btn${activeTab === "trends" ? " active" : ""}`}
-          onClick={() => setActiveTab("trends")}
-        >
-          Trends
-        </button>
+      <div ref={tabsRef} style={{ position: "sticky", top: "var(--page-header-h, 0px)", zIndex: 9, background: "var(--bg)", paddingBottom: 6 }}>
+        <div className="tab-bar">
+          <button
+            className={`tab-btn${activeTab === "routines" ? " active" : ""}`}
+            onClick={() => setActiveTab("routines")}
+          >
+            Routines{templates ? ` (${templates.length})` : ""}
+          </button>
+          <button
+            className={`tab-btn${activeTab === "history" ? " active" : ""}`}
+            onClick={() => setActiveTab("history")}
+          >
+            History{history ? ` (${history.length})` : ""}
+          </button>
+          <button
+            className={`tab-btn${activeTab === "trends" ? " active" : ""}`}
+            onClick={() => setActiveTab("trends")}
+          >
+            Trends
+          </button>
+        </div>
       </div>
 
       {activeTab === "routines" && (
         <div>
           <div className="card workout-actions-row" style={{ marginBottom: 20 }}>
-            <div style={{ minWidth: 0, flex: 1 }}>
+            {/* On a phone the text gets its own full-width row and the two buttons share the row below it,
+                instead of everything fighting for one line. On wide screens it all fits on one row. */}
+            <div style={{ minWidth: 0, flex: "1 1 220px" }}>
               <p style={{ fontWeight: 600 }}>New Routine</p>
               <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{copy.hint}</p>
             </div>
-            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-              <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => navigate("/workouts/new")}>
+            <div style={{ display: "flex", gap: 8, flex: "1 1 260px", maxWidth: 380, marginLeft: "auto" }}>
+              <button className="btn btn-secondary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={() => navigate("/workouts/new")}>
                 Build My Own
               </button>
-              <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={handleGenerate} disabled={generating || generateLocked}>
+              <button className="btn btn-primary" style={{ padding: "8px 14px", fontSize: 13, flex: 1 }} onClick={() => (hasGenerated ? setConfirmingGenerate(true) : handleGenerate())} disabled={generating || generateLocked}>
                 {generating ? "Working..." : copy.button}
               </button>
             </div>
           </div>
           {ownCount > 0 && generatedCount > 0 && (
-            <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                position: "sticky",
+                top: "calc(var(--page-header-h, 0px) + var(--workouts-tabs-h, 0px))",
+                zIndex: 9,
+                background: "var(--bg)",
+                padding: "0 0 8px",
+                marginBottom: 4,
+              }}
+            >
               <FilterChip active={filter === "all"} label={`All (${templates.length})`} onClick={() => handleFilterChange("all")} />
               <FilterChip active={filter === "own"} label={`Own (${ownCount})`} onClick={() => handleFilterChange("own")} />
               <FilterChip active={filter === "generated"} label={`Generated (${generatedCount})`} onClick={() => handleFilterChange("generated")} />
@@ -199,7 +250,10 @@ export default function WorkoutsDashboard() {
 
           {visibleTemplates?.length > 0 && (
             <div className="workout-template-grid">
-              {visibleTemplates.slice(0, visibleCount).map((r) => (
+              {visibleTemplates.slice(0, visibleCount).map((r) => {
+                const isActive = activeWorkout && String(activeWorkout.templateId) === String(r.id);
+                const blocked = activeWorkout && !isActive; // another workout is in progress
+                return (
                 <div
                   key={r.id}
                   className="card card-accent"
@@ -217,21 +271,33 @@ export default function WorkoutsDashboard() {
                     <button
                       className="btn btn-primary"
                       style={{ padding: "8px 14px", fontSize: 13 }}
-                      onClick={() => navigate(`/workouts/templates/${r.id}/start`)}
+                      onClick={() =>
+                        isActive
+                          ? navigate(`/workouts/templates/${r.id}/start`)
+                          : openStartSheet({ id: r.id, title: r.title })
+                      }
+                      disabled={blocked}
+                      title={blocked ? `Finish or discard "${activeWorkout.title}" first` : undefined}
                     >
-                      Start Workout
+                      {isActive ? "Resume Workout" : "Start Workout"}
                     </button>
                     <div style={{ display: "flex", gap: 16 }}>
                       <button className="btn-ghost" onClick={() => navigate(`/workouts/templates/${r.id}`)}>
                         {r.is_generated ? "View / Swap" : "Edit"}
                       </button>
-                      <button className="btn-ghost" onClick={() => setPendingDelete({ id: r.id, title: r.title })}>
+                      <button
+                        className="btn-ghost"
+                        onClick={() => setPendingDelete({ id: r.id, title: r.title })}
+                        disabled={isActive}
+                        title={isActive ? "Finish or discard this workout before deleting the routine" : undefined}
+                      >
                         Delete
                       </button>
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -296,6 +362,19 @@ export default function WorkoutsDashboard() {
 
       {activeTab === "trends" && <WorkoutTrendsPanel />}
 
+      <WorkoutPreviewSheet routine={previewRoutine} onClose={closeStartSheet} />
+
+      <ConfirmDialog
+        open={confirmingGenerate}
+        title="Update generated routines?"
+        message="This replaces your generated routines with new ones, including any swaps, removals or additions you made to them. Your own routines aren't affected."
+        confirmLabel="Update"
+        onConfirm={() => {
+          setConfirmingGenerate(false);
+          handleGenerate();
+        }}
+        onCancel={() => setConfirmingGenerate(false)}
+      />
       <ConfirmDialog
         open={pendingDelete !== null}
         title="Delete routine"

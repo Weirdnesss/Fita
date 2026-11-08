@@ -49,19 +49,23 @@ export default function WeightProgress() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3>Weight</h3>
         {mode === null && (
-          <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => setMode("log")}>
-            + Log Weight
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => setMode("goal")}>
+              {currentGoal != null ? "Change Goal" : "Set Goal"}
+            </button>
+            <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => setMode("log")}>
+              + Log Weight
+            </button>
+          </div>
         )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
         <StatTile label="Current" value={currentWeight != null ? formatWeight(currentWeight, unitSystem) : "Not logged"} accent="bamboo" />
         <StatTile
-          label="Goal ›"
-          value={currentGoal != null ? formatWeight(currentGoal, unitSystem) : "Set goal"}
+          label="Goal"
+          value={currentGoal != null ? formatWeight(currentGoal, unitSystem) : "Not set"}
           accent="turmeric"
-          onClick={() => setMode("goal")}
         />
         <StatTile label="BMI" value={bmi ?? "--"} accent="ube" />
       </div>      
@@ -90,13 +94,17 @@ export default function WeightProgress() {
       )}
 
       <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
-        <div className="tab-bar" style={{ marginBottom: 14 }}>
-          <button className={`tab-btn${tab === "trend" ? " active" : ""}`} onClick={() => setTab("trend")}>
-            Trend
-          </button>
-          <button className={`tab-btn${tab === "history" ? " active" : ""}`} onClick={() => setTab("history")}>
-            History
-          </button>
+        {/* Pinned under the page header so Trend / History stay reachable while a long history scrolls.
+            It paints the card's own background so the rows don't show through. */}
+        <div style={{ position: "sticky", top: "var(--page-header-h, 0px)", zIndex: 9, background: "var(--bg-card)", paddingBottom: 14 }}>
+          <div className="tab-bar">
+            <button className={`tab-btn${tab === "trend" ? " active" : ""}`} onClick={() => setTab("trend")}>
+              Trend
+            </button>
+            <button className={`tab-btn${tab === "history" ? " active" : ""}`} onClick={() => setTab("history")}>
+              History
+            </button>
+          </div>
         </div>
 
         <ErrorBanner message={error} />

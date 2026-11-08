@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
@@ -9,6 +9,7 @@ import { getMe } from "../../api/accounts";
 import DatePicker from "../../components/DatePicker";
 import NutritionTrendsPanel from "./NutritionTrendsPanel";
 import SettingsButton from "../../components/SettingsButton";
+
 
 
 const MEALS = [
@@ -147,6 +148,33 @@ export default function NutritionDashboard() {
     }
   }
 
+  // The tab bar and the date navigator are pinned under the page header. Their heights are published
+  // as CSS variables so what pins below them (the Add Food row, the Trends period selector) can stack
+  // underneath instead of sliding behind them.
+  const tabsRef = useRef(null);
+  const dateNavRef = useRef(null);
+  const loaded = Boolean(daily && goals && account);
+  useEffect(() => {
+    const root = document.documentElement;
+    const watch = (el, name) => {
+      if (!el) return () => {};
+      const publish = () => root.style.setProperty(name, `${el.offsetHeight}px`);
+      publish();
+      const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(publish) : null;
+      observer?.observe(el);
+      return () => {
+        observer?.disconnect();
+        root.style.removeProperty(name);
+      };
+    };
+    const stopTabs = watch(tabsRef.current, "--nutrition-tabs-h");
+    const stopNav = watch(dateNavRef.current, "--nutrition-datenav-h");
+    return () => {
+      stopTabs();
+      stopNav();
+    };
+  }, [loaded, activeTab]);
+
   if (!daily || !goals || !account) {
     return (
       <div className="page">
@@ -180,23 +208,28 @@ export default function NutritionDashboard() {
         action={<SettingsButton to="/nutrition/settings" label="Nutrition goals" />}
       />
       <ErrorBanner message={error} />
-      <div className="tab-bar">
-        <button
-          className={`tab-btn${activeTab === "log" ? " active" : ""}`}
-          onClick={() => setActiveTab("log")}
-        >
-          Log
-        </button>
-        <button
-          className={`tab-btn${activeTab === "trends" ? " active" : ""}`}
-          onClick={() => setActiveTab("trends")}
-        >
-          Trends
-        </button>
+
+      <div ref={tabsRef} style={{ position: "sticky", top: "var(--page-header-h, 0px)", zIndex: 9, background: "var(--bg)", paddingBottom: 6 }}>
+        <div className="tab-bar">
+          <button
+            className={`tab-btn${activeTab === "log" ? " active" : ""}`}
+            onClick={() => setActiveTab("log")}
+          >
+            Log
+          </button>
+          <button
+            className={`tab-btn${activeTab === "trends" ? " active" : ""}`}
+            onClick={() => setActiveTab("trends")}
+          >
+            Trends
+          </button>
+        </div>
       </div>
+
       {activeTab === "log" && (
       <div className="nutrition-content">
       <div
+        ref={dateNavRef}
         className="nutrition-date-nav"
         style={{
           display: "flex",
@@ -204,8 +237,13 @@ export default function NutritionDashboard() {
           alignItems: "flex-start",
           gap: 16,
           marginBottom: 8,
+          position: "sticky",
+          top: "calc(var(--page-header-h, 0px) + var(--nutrition-tabs-h, 0px))",
+          zIndex: 9,
+          background: "var(--bg)",
+          padding: "6px 0",
         }}
-      >
+      >      
             <button
         onClick={() => shiftDay(-1)}
         disabled={isOldestDate}
@@ -319,11 +357,16 @@ export default function NutritionDashboard() {
           <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{formatDayLabel(selectedDate)}</span>
         </div>
 
-        <div className="nutrition-actions page-actions" style={{ display: "flex", gap: 8 }}>
+        <div className="nutrition-actions page-actions" style={{ display: "flex", gap: 8, position: "sticky", top: "calc(var(--page-header-h, 0px) + var(--nutrition-tabs-h, 0px) + var(--nutrition-datenav-h, 0px))", zIndex: 9, background: "var(--bg)", padding: "6px 0" }}>
           {isWithinLogWindow ? (
-            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate("/nutrition/search", { state: { date: selectedDate } })}>
-              Add Food
-            </button>
+            <>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate("/nutrition/search", { state: { date: selectedDate } })}>
+                Add Food
+              </button>
+              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => navigate("/nutrition/suggestions", { state: { date: selectedDate } })}>
+                Meal Ideas
+              </button>
+            </>
           ) : (
             <p style={{ flex: 1, fontSize: 12, color: "var(--text-faint)", display: "flex", alignItems: "center" }}>
               Logging is only available for the last {MAX_BACKDATE_DAYS} days.
@@ -436,10 +479,7 @@ export default function NutritionDashboard() {
                       ) : (
                         <div
                           className="entry-row"
-                          role="button"
-                          tabIndex={0}
                           onClick={() => startEdit(e)}
-                          onKeyDown={(ev) => (ev.key === "Enter" || ev.key === " ") && startEdit(e)}
                           style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 8px", margin: "0 -8px" }}
                         >
                           <div style={{ minWidth: 0 }}>
@@ -448,7 +488,20 @@ export default function NutritionDashboard() {
                               {e.serving_description === "100g" ? `${Math.round(e.servings * e.serving_size_g)}g` : `${e.servings}x`}
                             </p>
                           </div>
-                          <span className="stat" style={{ fontSize: 13, flexShrink: 0 }}>{Math.round(e.calories)}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                            <span className="stat" style={{ fontSize: 13 }}>{Math.round(e.calories)}</span>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: "4px 10px", fontSize: 12, height: "auto", minHeight: 0 }}
+                              aria-label={`Edit ${e.food_name}`}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                startEdit(e);
+                              }}
+                            >
+                              Edit
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>

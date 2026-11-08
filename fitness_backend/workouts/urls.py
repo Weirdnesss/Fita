@@ -8,6 +8,7 @@ from .views import (
     ExerciseSearchView,
     GenerateWorkoutView,
     GenerationEligibilityView,
+    SuggestExerciseView,
     TemplateExerciseDetailView,
     TemplateExerciseSwapView,
     WorkoutHistoryDetailView,
@@ -15,6 +16,7 @@ from .views import (
     WorkoutTemplateDetailView,
     WorkoutTemplateListCreateView,
     WorkoutTrendsView,
+    TemplateExerciseSuggestionsView,
 )
 
 urlpatterns = [
@@ -44,4 +46,14 @@ urlpatterns = [
     path("trends/", WorkoutTrendsView.as_view(), name="workout-trends"),
     path("trends/exercises/", ExerciseFrequencyView.as_view(), name="workout-trends-exercises"),
     path("trends/exercise/", ExerciseProgressionView.as_view(), name="workout-trends-exercise"),
+        path(
+        "templates/<int:template_id>/exercises/suggestions/",
+        TemplateExerciseSuggestionsView.as_view(),
+        name="template-exercise-suggestions",
+    ),
+        path(
+        "templates/<int:template_id>/exercises/suggest/",
+        SuggestExerciseView.as_view(),
+        name="template-exercise-suggest",
+    ),
 ]

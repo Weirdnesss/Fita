@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
+import Pinned from "../../components/Pinned";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { getReportSettings, updateReportSettings } from "../../api/progress";
 import { useToast } from "../../context/ToastContext";
@@ -114,11 +115,14 @@ export default function ReportSettings() {
           />
         </div>
 
+      </div>
+
+      <Pinned bottom>
         <ErrorBanner message={error} />
         <button className="btn btn-primary btn-block" onClick={handleSave} disabled={saving}>
           {saving ? "Saving..." : "Save Settings"}
         </button>
-      </div>
+      </Pinned>
     </div>
   );
 }

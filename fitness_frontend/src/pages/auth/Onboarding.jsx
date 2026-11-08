@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { updateProfile, logWeight } from "../../api/accounts";
@@ -7,6 +7,7 @@ import WeightField from "../../components/WeightField";
 import UnitToggle from "../../components/UnitToggle";
 import { ErrorBanner, extractErrorMessage } from "../../components/Status";
 import DatePicker from "../../components/DatePicker";
+import Pinned from "../../components/Pinned";
 
 const GENDERS = [
   ["male", "Male"],
@@ -86,6 +87,8 @@ export default function Onboarding() {
   const [weightUnit, setWeightUnit] = useState(() => (user?.profile?.unit_system === "imperial" ? "lbs" : "kg"));
 
   const [form, setForm] = useState(() => initialFormFrom(user?.profile || {}));
+  // Going Back and pressing Continue again must not log the same weight twice.
+  const loggedWeightRef = useRef(null);
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
@@ -106,8 +109,9 @@ export default function Onboarding() {
       // ProfileSerializer) -- logging it here is what both sets the
       // baseline and gives the Weight History page a first entry to
       // show, instead of a value with no history behind it.
-      if (form.currentWeightKg) {
+      if (form.currentWeightKg && Number(form.currentWeightKg) !== loggedWeightRef.current) {
         await logWeight({ weightKg: Number(form.currentWeightKg) });
+        loggedWeightRef.current = Number(form.currentWeightKg);
       }
       await refreshUser();
       setStep(2);
@@ -230,8 +234,10 @@ export default function Onboarding() {
               cm={form.heightCm}
               onChange={(cm) => setForm((f) => ({ ...f, heightCm: cm }))}
             />
-            <ErrorBanner message={error} />
-            <button className="btn btn-primary btn-block" disabled={submitting}>{submitting ? "Saving..." : "Continue"}</button>
+            <Pinned bottom className="auth-pinned" style={{ bottom: 8, background: undefined }}>
+              <ErrorBanner message={error} />
+              <button className="btn btn-primary btn-block" disabled={submitting}>{submitting ? "Saving..." : "Continue"}</button>
+            </Pinned>
           </form>
         )}
 
@@ -260,8 +266,20 @@ export default function Onboarding() {
                 {LOCATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
-            <ErrorBanner message={error} />
-            <button className="btn btn-primary btn-block" disabled={submitting}>{submitting ? "Finishing..." : "Continue"}</button>
+            <Pinned bottom className="auth-pinned" style={{ bottom: 8, background: undefined }}>
+              <ErrorBanner message={error} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => { setError(""); setStep(1); }}
+                  disabled={submitting}
+                >
+                  Back
+                </button>
+                <button className="btn btn-primary" style={{ flex: 1 }} disabled={submitting}>{submitting ? "Finishing..." : "Continue"}</button>
+              </div>
+            </Pinned>
           </form>
         )}
 

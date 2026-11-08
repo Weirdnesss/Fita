@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
 import SegmentedControl from "../../components/SegmentedControl";
+import Pinned from "../../components/Pinned";
 import { useWidth } from "../../lib/useWidth";
 import { getWorkoutTrends, getExerciseFrequency, getExerciseProgression } from "../../api/workouts";
+import { formatSeconds } from "../../lib/formatSets";
 
 
 const PERIODS = [
@@ -53,9 +55,15 @@ export default function WorkoutTrendsPanel() {
     <div className="workout-trends">
       <ErrorBanner message={error} />
 
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <Pinned
+        style={{
+          top: "calc(var(--page-header-h, 0px) + var(--workouts-tabs-h, 0px))",
+          flexDirection: "row",
+          justifyContent: "flex-end",
+        }}
+      >
         <SegmentedControl options={PERIODS} value={period} onChange={setPeriod} />
-      </div>
+      </Pinned>
 
       {!trends && !error && <Loading />}
 
@@ -85,7 +93,7 @@ export default function WorkoutTrendsPanel() {
             <>
               <div className="card">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
-                  <p style={{ fontWeight: 600 }}>Volume</p>
+                  <p style={{ fontWeight: 600 }}>Weight Lifted</p>
                   {trends.volume_change_pct != null && (
                     <span style={{ fontSize: 12, fontWeight: 600, color: trends.volume_change_pct >= 0 ? "var(--bamboo)" : "var(--chili)" }}>
                       {trends.volume_change_pct >= 0 ? "↑" : "↓"} {Math.abs(trends.volume_change_pct)}% vs last {period}
@@ -93,7 +101,7 @@ export default function WorkoutTrendsPanel() {
                   )}
                 </div>
                 <p style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 10 }}>
-                  Total weight × reps across all your sets each day
+                  Weight × reps on weighted exercises each day. Bodyweight exercises and timed holds aren't included.
                 </p>
                 <VolumeBarChart days={trends.days} resetKey={period} />
               </div>
@@ -103,7 +111,7 @@ export default function WorkoutTrendsPanel() {
                   Averages <span style={{ fontWeight: 400, fontSize: 12, color: "var(--text-faint)" }}>(on workout days)</span>
                 </p>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, textAlign: "center" }}>
-                  <StatBox label="Volume" value={`${Math.round(trends.averages.volume).toLocaleString()} kg`} />
+                  <StatBox label="Weight Lifted" value={`${Math.round(trends.averages.volume).toLocaleString()} kg`} />
                   <StatBox label="Sets" value={trends.averages.sets} />
                 </div>
               </div>
@@ -117,6 +125,31 @@ export default function WorkoutTrendsPanel() {
       <ExerciseProgressionSection />
     </div>
   );
+}
+
+// What "best set" means depends on how the exercise is logged.
+const METRIC = { weight_reps: "top_weight", reps: "top_reps", time: "top_seconds" };
+const SUBTITLE = {
+  weight_reps: "Your heaviest set each session",
+  reps: "Your best set (most reps) each session",
+  time: "Your longest hold each session",
+};
+
+function sessionLabel(type, s) {
+  if (type === "reps") return `${s.top_reps} reps`;
+  if (type === "time") return formatSeconds(s.top_seconds);
+  return `${s.top_weight} kg × ${s.top_weight_reps}`;
+}
+function axisLabel(type, v) {
+  if (type === "time") return formatSeconds(Math.round(v));
+  if (type === "reps") return `${Math.round(v)}`;
+  return `${round1(v)} kg`;
+}
+function changeLabel(type, delta) {
+  const n = Math.abs(delta);
+  if (type === "time") return formatSeconds(n);
+  if (type === "reps") return `${n} reps`;
+  return `${n} kg`;
 }
 
 function ExerciseProgressionSection() {
@@ -162,10 +195,12 @@ function ExerciseProgressionSection() {
     );
   }
 
+  const inputType = progression?.input_type || "weight_reps";
+  const metric = METRIC[inputType];
   const sessions = progression?.sessions || [];
   const first = sessions[0];
   const latest = sessions[sessions.length - 1];
-  const change = sessions.length >= 2 ? round1(latest.top_weight - first.top_weight) : null;
+  const change = sessions.length >= 2 ? round1(latest[metric] - first[metric]) : null;
 
   return (
     <div className="card">
@@ -174,7 +209,7 @@ function ExerciseProgressionSection() {
         <SegmentedControl options={PROGRESSION_PERIODS} value={progPeriod} onChange={setProgPeriod} />
       </div>
       <p style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 10 }}>
-        Your heaviest set each session
+        {SUBTITLE[inputType]}
       </p>
 
       <select value={selected} onChange={(e) => setSelected(e.target.value)} style={{ marginBottom: 12 }}>
@@ -193,14 +228,14 @@ function ExerciseProgressionSection() {
             <EmptyState title={`No ${selected} logged in this period`} />
           ) : (
             <>
-              <ProgressionChart sessions={sessions} resetKey={`${selected}|${progPeriod}`} />
+              <ProgressionChart sessions={sessions} inputType={inputType} resetKey={`${selected}|${progPeriod}`} />
               <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginTop: 10, fontSize: 12 }}>
                 <span style={{ color: "var(--text-faint)" }}>
-                  Latest: <strong style={{ color: "var(--text)" }}>{latest.top_weight} kg × {latest.top_weight_reps}</strong>
+                  Latest: <strong style={{ color: "var(--text)" }}>{sessionLabel(inputType, latest)}</strong>
                 </span>
                 {change !== null && (
                   <span style={{ color: change > 0 ? "var(--bamboo)" : change < 0 ? "var(--chili)" : "var(--text-faint)" }}>
-                    {change > 0 ? "↑" : change < 0 ? "↓" : "→"} {Math.abs(change)} kg since {shortDate(first.date)}
+                    {change > 0 ? "↑" : change < 0 ? "↓" : "→"} {changeLabel(inputType, change)} since {shortDate(first.date)}
                   </span>
                 )}
               </div>
@@ -212,8 +247,9 @@ function ExerciseProgressionSection() {
   );
 }
 
-function ProgressionChart({ sessions, resetKey }) {
+function ProgressionChart({ sessions, inputType, resetKey }) {
   const [ref, width] = useWidth();
+  const metric = METRIC[inputType];
   // The selection remembers which exercise/period it was made under, so
   // it's ignored (not just cleared later) once either one changes.
   const [sel, setSel] = useState({ key: resetKey, index: null });
@@ -222,10 +258,10 @@ function ProgressionChart({ sessions, resetKey }) {
   const height = width >= 560 ? 220 : 170;
   const pad = { top: 16, right: 16, bottom: 26, left: 56 };
 
-  const weights = sessions.map((s) => s.top_weight);
+  const values = sessions.map((s) => s[metric]);
   const times = sessions.map((s) => toTime(s.date));
-  const lo = Math.min(...weights);
-  const hi = Math.max(...weights);
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
   const span = hi - lo || Math.max(hi * 0.1, 1);
   const scaleMin = lo - span * 0.15;
   const scaleMax = hi + span * 0.15;
@@ -236,9 +272,9 @@ function ProgressionChart({ sessions, resetKey }) {
   const plotH = height - pad.top - pad.bottom;
   const baseY = pad.top + plotH;
   const xFor = (t) => (maxT === minT ? pad.left + plotW / 2 : pad.left + ((t - minT) / (maxT - minT)) * plotW);
-  const yFor = (w) => pad.top + plotH - ((w - scaleMin) / (scaleMax - scaleMin)) * plotH;
+  const yFor = (v) => pad.top + plotH - ((v - scaleMin) / (scaleMax - scaleMin)) * plotH;
 
-  const pts = sessions.map((s) => [xFor(toTime(s.date)), yFor(s.top_weight)]);
+  const pts = sessions.map((s) => [xFor(toTime(s.date)), yFor(s[metric])]);
   const line = pts.map(([x, y]) => `${x},${y}`).join(" ");
   const ticks = [0, 0.5, 1].map((t) => scaleMin + t * (scaleMax - scaleMin));
   const showAllDots = sessions.length <= 31;
@@ -259,7 +295,7 @@ function ProgressionChart({ sessions, resetKey }) {
         {a !== null && (
           <>
             <span style={{ color: "var(--text-faint)" }}>{fullDate(sessions[a].date)}</span>
-            <strong className="stat">{sessions[a].top_weight} kg × {sessions[a].top_weight_reps}</strong>
+            <strong className="stat">{sessionLabel(inputType, sessions[a])}</strong>
             <span style={{ color: "var(--text-faint)" }}>{sessions[a].total_sets} sets</span>
           </>
         )}
@@ -278,7 +314,7 @@ function ProgressionChart({ sessions, resetKey }) {
             <g key={v}>
               <line x1={pad.left} x2={width - pad.right} y1={yFor(v)} y2={yFor(v)} stroke="var(--border-soft)" strokeWidth="1" />
               <text x={pad.left - 8} y={yFor(v) + 3} fontSize="10" fill="var(--text-faint)" textAnchor="end">
-                {round1(v)} kg
+                {axisLabel(inputType, v)}
               </text>
             </g>
           ))}

@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
-import { createTemplate, getTemplate, updateTemplate, addExerciseToTemplate, removeExerciseFromTemplate, updateTemplateExercise, swapTemplateExercise, searchExercisesPaged, getExerciseCategories } from "../../api/workouts";
+import { createTemplate, getTemplate, updateTemplate, addExerciseToTemplate, removeExerciseFromTemplate, updateTemplateExercise, swapTemplateExercise, suggestTemplateExercise } from "../../api/workouts";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
+import Pinned from "../../components/Pinned";
+import ExerciseSearch from "./ExerciseSearch";
 
 const MAX_TARGET_SETS = 10;
+const MIN_GENERATED_EXERCISES = 1;
+const MAX_GENERATED_EXERCISES = 15;
 
 export default function TemplateEditor() {
   const { id } = useParams();
@@ -164,6 +168,17 @@ export default function TemplateEditor() {
   if (showSearch) {
     return (
       <ExerciseSearch
+        templateId={template.is_generated ? template.id : null}
+        onSuggest={
+          template.is_generated
+            ? async () => {
+                const updated = await suggestTemplateExercise(template.id);
+                handleExerciseAdded(updated);
+                const added = updated.exercises[updated.exercises.length - 1];
+                showToast(`Added ${added.exercise_name}`, "success");
+              }
+            : null
+        }
         onAdd={async (wgerExerciseId) => {
           try {
             const persisted = await ensureTemplatePersisted();
@@ -180,15 +195,11 @@ export default function TemplateEditor() {
   }
 
   if (template.is_generated) {
-    // Generated routines are regenerated in place from the Workouts
-    // dashboard, not edited here -- the dashboard already hides the
-    // Edit button for these, but this read-only view is the backstop
-    // if someone lands here directly (a bookmarked/typed URL, back
-    // button after deletion, etc.), matching the same guard the
-    // backend enforces on every mutation for a generated template.
-    // Swapping a single exercise is the one exception: it's allowed
-    // here even though nothing else is, since it doesn't touch the
-    // weekly Generate cooldown.
+    // Generated routines keep their structure (title, set counts, goal-based
+    // regeneration), but single exercises can be swapped, removed, or added.
+    // Adds are restricted to beginner-safe suggestions from the backend.
+    const canRemove = template.exercises.length > MIN_GENERATED_EXERCISES;
+    const canAdd = template.exercises.length < MAX_GENERATED_EXERCISES;
     return (
       <div className="page">
         <PageHeader
@@ -202,7 +213,7 @@ export default function TemplateEditor() {
           }
         />
         <p style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 16 }}>
-          Generated routines can't be edited directly, but you can swap out a single exercise below if it's too hard, unavailable, or not right for you.
+          You can swap, remove, or add exercises to fit your equipment and schedule.
         </p>
         <ErrorBanner message={error} />
         {template.exercises.map((ex) => (
@@ -211,11 +222,28 @@ export default function TemplateEditor() {
             exercise={ex}
             active={swapTargetId === ex.id}
             swapping={swappingId === ex.id}
+            canRemove={canRemove}
             onToggle={() => setSwapTargetId(swapTargetId === ex.id ? null : ex.id)}
             onSwap={(reason) => handleSwapExercise(ex.id, reason)}
+            onRemove={() => setPendingRemove({ id: ex.id, name: ex.exercise_name })}
             onWeightUnitChange={(unit) => handleWeightUnitChange(ex.id, unit)}
           />
         ))}
+        {canAdd && (
+          <Pinned bottom>
+            <button className="btn btn-secondary btn-block" onClick={() => setShowSearch(true)}>
+              + Add Exercise
+            </button>
+          </Pinned>
+        )}
+        <ConfirmDialog
+          open={pendingRemove !== null}
+          title="Remove exercise"
+          message={pendingRemove ? `Remove "${pendingRemove.name}" from this routine?` : ""}
+          confirmLabel="Remove"
+          onConfirm={confirmRemoveExercise}
+          onCancel={() => setPendingRemove(null)}
+        />
       </div>
     );
   }
@@ -239,12 +267,14 @@ export default function TemplateEditor() {
           </div>
         }
       />
+      <Pinned>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Enter template title..."
         style={{ fontSize: 18, fontWeight: 600 }}
       />
+      </Pinned>
       <ErrorBanner message={error} />
 
       <div>
@@ -333,9 +363,11 @@ export default function TemplateEditor() {
             </div>
           </div>
         ))}
-        <button className="btn btn-secondary btn-block" onClick={() => setShowSearch(true)}>
-          + Add Exercise
-        </button>
+        <Pinned bottom>
+          <button className="btn btn-secondary btn-block" onClick={() => setShowSearch(true)}>
+            + Add Exercise
+          </button>
+        </Pinned>
       </div>
 
       <ConfirmDialog
@@ -358,7 +390,7 @@ export default function TemplateEditor() {
   );
 }
 
-function GeneratedExerciseRow({ exercise, active, swapping, onToggle, onSwap, onWeightUnitChange }) {
+function GeneratedExerciseRow({ exercise, active, swapping, canRemove, onToggle, onSwap, onRemove, onWeightUnitChange }) {
   const REASONS = [
     ["too_hard", "Too hard"],
     ["unavailable", "Not available"],
@@ -366,21 +398,33 @@ function GeneratedExerciseRow({ exercise, active, swapping, onToggle, onSwap, on
   ];
   return (
     <div className="card card-accent" style={{ marginBottom: 10, "--accent-color": "var(--chili)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <div>
           <p style={{ fontWeight: 600 }}>{exercise.exercise_name}</p>
           <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
             {exercise.category_name} {exercise.equipment_name ? `· ${exercise.equipment_name}` : ""}
           </p>
         </div>
-        <button
-          className="btn btn-secondary"
-          style={{ padding: "6px 12px", fontSize: 12 }}
-          onClick={onToggle}
-          disabled={swapping}
-        >
-          Swap
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button
+            className="btn btn-secondary"
+            style={{ padding: "6px 12px", fontSize: 12 }}
+            onClick={onToggle}
+            disabled={swapping}
+          >
+            Swap
+          </button>
+          {canRemove && (
+            <button
+              className="btn-ghost"
+              style={{ fontSize: 12 }}
+              onClick={onRemove}
+              disabled={swapping}
+            >
+              Remove
+            </button>
+          )}
+        </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
         <p style={{ fontSize: 13 }}>{exercise.target_sets} target sets</p>
@@ -420,119 +464,5 @@ function GeneratedExerciseRow({ exercise, active, swapping, onToggle, onSwap, on
         </div>
       )}
     </div>
-  );
-}
-
-function ExerciseSearch({ onAdd, onClose }) {
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState(null);
-  const [categories, setCategories] = useState([]);
-  const [results, setResults] = useState([]);
-  const [count, setCount] = useState(0);
-  const [nextOffset, setNextOffset] = useState(null);
-  const [hint, setHint] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState("");
-
-  // Guards against a stale response (from a query/category that's since
-  // changed, e.g. fast-switching categories) landing after a newer one
-  // and clobbering it. Mirrors nutrition's FoodSearch.
-  const requestIdRef = useRef(0);
-
-  useEffect(() => {
-    getExerciseCategories().then(setCategories).catch(() => setCategories([]));
-  }, []);
-
-  useEffect(() => {
-    const t = setTimeout(async () => {
-      const requestId = ++requestIdRef.current;
-      setLoading(true);
-      setError("");
-      try {
-        const r = await searchExercisesPaged(query, category, 0);
-        if (requestId !== requestIdRef.current) return; // superseded
-        setResults(r.results);
-        setCount(r.count);
-        setNextOffset(r.next_offset);
-        setHint(r.hint || null);
-      } catch (err) {
-        if (requestId !== requestIdRef.current) return;
-        setError("Couldn't search exercises. Check your connection and try again.");
-      } finally {
-        if (requestId === requestIdRef.current) setLoading(false);
-      }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [query, category]);
-
-  async function handleLoadMore() {
-    setLoadingMore(true);
-    try {
-      const r = await searchExercisesPaged(query, category, nextOffset);
-      setResults((prev) => [...prev, ...r.results]);
-      setNextOffset(r.next_offset);
-    } catch (err) {
-      setError("Couldn't load more exercises.");
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
-  return (
-    <div className="page">
-      <PageHeader title="Add Exercise" back onBack={onClose} />
-      <input autoFocus placeholder="Search for an exercise" value={query} onChange={(e) => setQuery(e.target.value)} />
-
-      {categories.length > 0 && (
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-          <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
-          {categories.map((c) => (
-            <CategoryChip key={c} active={category === c} label={c} onClick={() => setCategory(category === c ? null : c)} />
-          ))}
-        </div>
-      )}
-
-      {loading && <Loading label="Searching" />}
-      <ErrorBanner message={error} />
-      {hint && !loading && (
-        <p style={{ color: "var(--text-faint)", fontSize: 13 }}>{hint}</p>
-      )}
-      {!loading && !hint && results.length === 0 && !error && (
-        <p style={{ color: "var(--text-faint)", fontSize: 13 }}>
-          {query || category ? `No exercises found.` : "No exercises available."}
-        </p>
-      )}
-      <div className="resource-results-grid">
-        {results.map((ex) => (
-          <div
-            key={ex.wger_exercise_id}
-            className="card card-accent"
-            style={{ marginBottom: 8, cursor: "pointer", "--accent-color": "var(--chili)" }}
-            onClick={() => onAdd(ex.wger_exercise_id)}
-          >
-            <p style={{ fontWeight: 600 }}>{ex.name}</p>
-            {ex.category && <p style={{ fontSize: 12, color: "var(--text-faint)" }}>{ex.category}</p>}
-          </div>
-        ))}
-      </div>
-      {nextOffset !== null && !loading && (
-        <button className="btn btn-secondary" style={{ width: "100%" }} onClick={handleLoadMore} disabled={loadingMore}>
-          {loadingMore ? "Loading..." : `Load More (${count - results.length} left)`}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function CategoryChip({ active, label, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={active ? "btn btn-primary" : "btn btn-secondary"}
-      style={{ padding: "6px 12px", fontSize: 12, whiteSpace: "nowrap", flexShrink: 0, height: "auto" }}
-    >
-      {label}
-    </button>
   );
 }

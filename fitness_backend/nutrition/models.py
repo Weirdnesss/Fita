@@ -63,7 +63,18 @@ class FoodItem(models.Model):
         max_length=20,
         blank=True,
         db_index=True,
-        help_text="Source dataset's own ID (e.g. PhilFCT Food_ID like 'A001'), for idempotent bulk imports",
+        help_text=(
+            "Source dataset's own ID for idempotent bulk imports: PhilFCT Food_ID "
+            "like 'A001', 'usda:171477' for USDA FDC, 'off:4800016644108' for Open Food Facts"
+        ),
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="custom_foods",
+        help_text="Set only for user-submitted custom foods, which are private to that user",
     )
 
     class Meta:
@@ -72,6 +83,19 @@ class FoodItem(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.serving_description})"
+
+    @property
+    def source_type(self):
+        """philfct | usda | openfoodfacts | user | estimated -- derived, not stored."""
+        if self.created_by_id is not None:
+            return "user"
+        if self.source.startswith("PhilFCT"):
+            return "philfct"
+        if self.source.startswith("USDA"):
+            return "usda"
+        if self.source.startswith("Open Food Facts"):
+            return "openfoodfacts"
+        return "estimated"
 
 
 class NutritionProfile(models.Model):

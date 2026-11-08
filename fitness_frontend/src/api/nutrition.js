@@ -57,3 +57,64 @@ export async function getNutritionTrends(period = "week") {
   const { data } = await client.get("/nutrition/trends/", { params: { period } });
   return data; // { period, days, days_logged, averages, current_streak }
 }
+
+export async function getFoodSuggestions({ mealType, date, limit = 4, exclude = [], explain = true } = {}) {
+  // Rule-picked foods that fit what's left of the day's goals; the LLM only
+  // re-ranks/explains them. Each item: { food, servings, amount_label,
+  // calories, protein_g, carbs_g, fat_g, reason, reason_source }.
+  // `exclude` = food ids already shown, for "show different ideas".
+  const { data } = await client.get("/nutrition/suggestions/", {
+    params: {
+      meal_type: mealType,
+      date,
+      limit,
+      explain,
+      exclude: exclude.length ? exclude.join(",") : undefined,
+    },
+  });
+  return data; // { meal_type, date, remaining, suggestions, message? }
+}
+
+// A user's own foods (private to them) -- for anything missing from the database.
+export async function createCustomFood(fields) {
+  const { data } = await client.post("/nutrition/foods/custom/", fields);
+  return data; // same shape as a search result
+}
+
+export async function updateCustomFood(id, fields) {
+  const { data } = await client.patch(`/nutrition/foods/custom/${id}/`, fields);
+  return data;
+}
+
+export async function deleteCustomFood(id) {
+  // 409 if the food has already been logged (the backend protects history).
+  await client.delete(`/nutrition/foods/custom/${id}/`);
+}
+
+export async function getMealSuggestions({ mealType, date, limit = 3, exclude = [], explain = true } = {}) {
+  // Whole-plate ideas (a protein + a carb + a veg or fruit), portioned to fit
+  // what's left today. Each meal: { items: [{ food, role, servings,
+  // amount_label, calories, protein_g, carbs_g, fat_g }], totals, reason,
+  // reason_source }. `exclude` = food ids already shown (skipped as the main item).
+  const { data } = await client.get("/nutrition/suggestions/meals/", {
+    params: {
+      meal_type: mealType,
+      date,
+      limit,
+      explain,
+      exclude: exclude.length ? exclude.join(",") : undefined,
+    },
+  });
+  return data; // { meal_type, date, remaining, meals, message? }
+}
+
+export async function logFoodsBulk({ mealType, date, items }) {
+  // Logs several foods to one meal at once, all-or-nothing ("Add all" on a plate).
+  // items: [{ foodItemId, servings }]
+  const { data } = await client.post("/nutrition/entries/bulk/", {
+    meal_type: mealType,
+    date,
+    items: items.map((i) => ({ food_item: i.foodItemId, servings: i.servings })),
+  });
+  return data; // the created entries
+}

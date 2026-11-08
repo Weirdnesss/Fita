@@ -47,21 +47,43 @@ const FOOD_CATEGORIES = [
 
 export default function ResourcesList() {
   const [tab, setTab] = useState("exercises");
+  const tabsRef = useRef(null);
+
+  // The tab bar is pinned under the page header; its height is published as
+  // --resources-tabs-h so each tab's search box (Pinned) can pin right below it.
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty("--resources-tabs-h", `${el.offsetHeight}px`);
+    publish();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(publish) : null;
+    observer?.observe(el);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty("--resources-tabs-h");
+    };
+  }, []);
 
   return (
     <div className="page">
       <PageHeader title="Resources" subtitle="Exercises, Food & Articles" />
 
-      <div className="tab-bar">
-        {TABS.map(([value, label]) => (
-          <button
-            key={value}
-            className={`tab-btn${tab === value ? " active" : ""}`}
-            onClick={() => setTab(value)}
-          >
-            {label}
-          </button>
-        ))}
+      <div
+        ref={tabsRef}
+        style={{ position: "sticky", top: "var(--page-header-h, 0px)", zIndex: 9, background: "var(--bg)", paddingBottom: 6 }}
+      >
+        <div className="tab-bar">
+          {TABS.map(([value, label]) => (
+            <button
+              key={value}
+              className={`tab-btn${tab === value ? " active" : ""}`}
+              onClick={() => setTab(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === "exercises" && <ExercisesTab />}
@@ -137,15 +159,17 @@ function ExercisesTab() {
 
   return (
     <>
-      <input autoFocus placeholder="Search exercises (e.g. bench press, squat)" value={query} onChange={(e) => setQuery(e.target.value)} />
-      {categories.length > 0 && (
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-          <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
-          {categories.map((c) => (
-            <CategoryChip key={c} active={category === c} label={c} onClick={() => setCategory(category === c ? null : c)} />
-          ))}
-        </div>
-      )}
+      <Pinned>
+        <input autoFocus placeholder="Search exercises (e.g. bench press, squat)" value={query} onChange={(e) => setQuery(e.target.value)} />
+        {categories.length > 0 && (
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+            <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
+            {categories.map((c) => (
+              <CategoryChip key={c} active={category === c} label={c} onClick={() => setCategory(category === c ? null : c)} />
+            ))}
+          </div>
+        )}
+      </Pinned>
       {loading && <Loading />}
       <ErrorBanner message={error} />
       {hint && <p style={{ fontSize: 13, color: "var(--text-faint)" }}>{hint}</p>}
@@ -273,13 +297,15 @@ function FoodTab() {
 
   return (
     <>
-      <input placeholder="Search foods (e.g. adobo, rice)" value={query} onChange={(e) => setQuery(e.target.value)} />
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-        <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
-        {FOOD_CATEGORIES.map(([value, label]) => (
-          <CategoryChip key={value} active={category === value} label={label} onClick={() => setCategory(category === value ? null : value)} />
-        ))}
-      </div>
+      <Pinned>
+        <input placeholder="Search foods (e.g. adobo, rice)" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+          <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
+          {FOOD_CATEGORIES.map(([value, label]) => (
+            <CategoryChip key={value} active={category === value} label={label} onClick={() => setCategory(category === value ? null : value)} />
+          ))}
+        </div>
+      </Pinned>
       {loading && <Loading />}
       <ErrorBanner message={error} />
       {!loading && query.trim().length === 0 && category === null && (
@@ -310,7 +336,7 @@ function FoodTab() {
             <div style={{ textAlign: "right", flexShrink: 0 }}>
               <span className="stat" style={{ fontSize: 14, display: "block" }}>{Math.round(food.calories)} kcal</span>
               <span className={`pill ${food.is_verified ? "pill-bamboo" : "pill-neutral"}`} style={{ marginTop: 4 }}>
-                {food.is_verified ? "PhilFCT" : "Estimated"}
+                {food.source_label || (food.is_verified ? "PhilFCT" : "Estimated")}
               </span>
             </div>
           </div>
@@ -336,7 +362,7 @@ function FoodDetail({ food, onBack }) {
         onBack={onBack}
       />
       <span className={`pill ${food.is_verified ? "pill-bamboo" : "pill-neutral"}`}>
-        {food.is_verified ? "PhilFCT" : "Estimated"}
+        {food.source_label || (food.is_verified ? "PhilFCT" : "Estimated")}
       </span>
       <div className="card">
         <p className="eyebrow" style={{ marginBottom: 8 }}>Per {food.serving_description}</p>
@@ -400,13 +426,15 @@ function ArticlesTab() {
 
   return (
     <>
-      <input placeholder="Search articles" value={query} onChange={(e) => setQuery(e.target.value)} />
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-        <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
-        {ARTICLE_CATEGORIES.map(([value, label]) => (
-          <CategoryChip key={value} active={category === value} label={label} onClick={() => setCategory(category === value ? null : value)} />
-        ))}
-      </div>
+      <Pinned>
+        <input placeholder="Search articles" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+          <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
+          {ARTICLE_CATEGORIES.map(([value, label]) => (
+            <CategoryChip key={value} active={category === value} label={label} onClick={() => setCategory(category === value ? null : value)} />
+          ))}
+        </div>
+      </Pinned>
       <ErrorBanner message={error} />
       {resources === null && <Loading />}
       {resources?.length === 0 && (
@@ -456,6 +484,26 @@ function ArticleCategoryPill({ category }) {
 /* ============================================================
    SHARED
    ============================================================ */
+
+// Search box + category chips: stays on screen under the header and tab bar while results scroll.
+function Pinned({ children }) {
+  return (
+    <div
+      style={{
+        position: "sticky",
+        top: "calc(var(--page-header-h, 0px) + var(--resources-tabs-h, 0px))",
+        zIndex: 8,
+        background: "var(--bg)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        paddingBottom: 6,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 function CategoryChip({ active, label, onClick }) {
   return (

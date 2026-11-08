@@ -58,8 +58,16 @@ class GenerateReportTests(APITestCase):
     @mock.patch.dict(os.environ, {}, clear=False)
     def test_missing_groq_key_returns_502(self):
         os.environ.pop("GROQ_API_KEY", None)
-        response = self.client.post("/progress/reports/generate/", {})
+        # An explicit period_days skips the "nothing logged yet" guard, which
+        # otherwise answers 400 before the key is ever checked.
+        response = self.client.post("/progress/reports/generate/", {"period_days": 7})
         self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertFalse(ProgressReport.objects.filter(user=self.user).exists())
+
+    def test_refuses_when_nothing_has_been_logged(self):
+        response = self.client.post("/progress/reports/generate/", {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Nothing logged", response.data["error"])
         self.assertFalse(ProgressReport.objects.filter(user=self.user).exists())
 
     def test_rejects_invalid_report_type(self):

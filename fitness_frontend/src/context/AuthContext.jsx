@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { getTokens } from "../api/client";
 import { getMe, login as apiLogin, logout as apiLogout } from "../api/accounts";
+import { clearActiveWorkout } from "../lib/activeWorkout";
 
 const AuthContext = createContext(null);
 
@@ -35,6 +36,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     await apiLogout();
+    clearActiveWorkout(); // a workout in progress belongs to the account that started it
     setUser(null);
   };
 

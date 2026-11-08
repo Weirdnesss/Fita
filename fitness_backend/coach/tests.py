@@ -126,7 +126,7 @@ class DataCollectionServiceRoutinesTests(APITestCase):
         )
         summary = self._service().get_current_routines_summary()
         self.assertIn("Push Day", summary)
-        self.assertIn("AI-generated", summary)
+        self.assertIn("Generated", summary)
         self.assertIn("Bench Press", summary)
         self.assertIn("4 sets", summary)
 

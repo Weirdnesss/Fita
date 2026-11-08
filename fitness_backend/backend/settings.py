@@ -89,6 +89,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://10.162.222.183:5173",
     "http://192.168.1.102:5173",
     "http://172.30.213.183:5173",
+    "http://192.168.1.233:5173"
 ] + [o.strip() for o in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()]
 
 ROOT_URLCONF = 'backend.urls'

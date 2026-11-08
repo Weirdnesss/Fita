@@ -7,6 +7,7 @@ import { useToast } from "../../context/ToastContext";
 import { getNutritionProfile, updateNutritionProfile, getSuggestedGoals } from "../../api/nutrition";
 import { updateProfile } from "../../api/accounts";
 import DatePicker from "../../components/DatePicker";
+import Pinned from "../../components/Pinned";
 
 // Mirrors NutritionProfileSerializer's bounds on the backend.
 const GOAL_FIELDS = [
@@ -300,11 +301,14 @@ export default function NutritionSettings() {
           );
         })}
 
+      </div>
+
+      <Pinned bottom>
         <ErrorBanner message={error} />
         <button className="btn btn-primary btn-block" onClick={handleSave} disabled={saving || goalsInvalid}>
           {saving ? "Saving..." : "Save Goals"}
         </button>
-      </div>
+      </Pinned>
     </div>
   );
 }

@@ -69,10 +69,11 @@ export async function removeExerciseFromTemplate(templateId, exerciseId) {
   return data;
 }
 
-export async function updateTemplateExercise(templateId, exerciseId, { targetSets, weightUnit }) {
+export async function updateTemplateExercise(templateId, exerciseId, { targetSets, weightUnit, inputType }) {
   const body = {};
   if (targetSets !== undefined) body.target_sets = targetSets;
   if (weightUnit !== undefined) body.weight_unit = weightUnit;
+  if (inputType !== undefined) body.input_type = inputType;
   const { data } = await client.patch(`/workouts/templates/${templateId}/exercises/${exerciseId}/`, body);
   return data;
 }
@@ -120,4 +121,16 @@ export async function getExerciseFrequency() {
 export async function getExerciseProgression(name, period = "3months") {
   const { data } = await client.get("/workouts/trends/exercise/", { params: { name, period } });
   return data; // { exercise, period, sessions: [{ date, top_weight, top_weight_reps, total_sets }] }
+}
+export async function getTemplateExerciseSuggestions(templateId, query = "", category = null) {
+  const params = {};
+  if (query) params.q = query;
+  if (category) params.category = category;
+  const { data } = await client.get(`/workouts/templates/${templateId}/exercises/suggestions/`, { params });
+  return data; // { categories: [...], results: [...] }
+}
+
+export async function suggestTemplateExercise(templateId) {
+  const { data } = await client.post(`/workouts/templates/${templateId}/exercises/suggest/`);
+  return data; // updated template
 }

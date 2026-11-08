@@ -61,3 +61,6 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+# Generated expert-validation packet (python manage.py export_validation_packet)
+validation_packet/
+*.patch

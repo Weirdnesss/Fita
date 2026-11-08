@@ -4,6 +4,7 @@ import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { useToast } from "../../context/ToastContext";
 import { searchFoods, logFood, updateFoodEntry } from "../../api/nutrition";
+import { CATEGORIES } from "./foodCategories";
 
 const MEALS = [
   ["breakfast", "Breakfast"],
@@ -14,26 +15,6 @@ const MEALS = [
 
 // Mirrors nutrition.views.MAX_SERVINGS on the backend.
 const MAX_SERVINGS = 50;
-
-// Mirrors nutrition.models.FoodCategory on the backend.
-const CATEGORIES = [
-  ["rice_grains", "Rice & Grains"],
-  ["roots_tubers", "Roots & Tubers"],
-  ["nuts_legumes", "Nuts & Legumes"],
-  ["viands_meat", "Meat & Poultry"],
-  ["viands_fish", "Fish & Seafood"],
-  ["eggs", "Eggs"],
-  ["dairy", "Dairy"],
-  ["fats_oils", "Fats & Oils"],
-  ["vegetables", "Vegetables"],
-  ["fruits", "Fruits"],
-  ["soups", "Soups & Stews"],
-  ["snacks", "Snacks & Merienda"],
-  ["desserts", "Desserts & Sweets"],
-  ["beverages", "Beverages"],
-  ["condiments", "Condiments & Sauces"],
-  ["other", "Other"],
-];
 
 export default function FoodSearch() {
   const navigate = useNavigate();
@@ -50,7 +31,13 @@ export default function FoodSearch() {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
-  const [selected, setSelected] = useState(null);
+  // Arriving with openFood (Meal Ideas "Adjust", or just after saving your
+  // own food) goes straight to that food's amount screen.
+  const [selected, setSelected] = useState(location.state?.openFood || null);
+
+  // Passed along to the custom-food form so we come back to the same
+  // log date / meal / swap target afterwards.
+  const routeContext = { date: logDate, mealType: presetMealType, editingEntryId, editingMealType };
 
   // Guards against a stale response (from a query/category that's since
   // changed, e.g. fast-switching categories) landing after a newer one
@@ -102,6 +89,7 @@ export default function FoodSearch() {
         editingEntryId={editingEntryId}
         editingMealType={editingMealType}
         presetMealType={presetMealType}
+        onEdit={() => navigate("/nutrition/foods/custom", { state: { ...routeContext, food: selected } })}
         onBack={() => setSelected(null)}
         onLogged={() => navigate("/nutrition", { state: { date: logDate } })}
       />
@@ -111,13 +99,35 @@ export default function FoodSearch() {
   return (
     <div className="page">
       <PageHeader title={editingEntryId ? "Swap Food" : "Add Food"} back />
-      <input autoFocus placeholder="Search for a food (e.g. adobo, rice)" value={query} onChange={(e) => setQuery(e.target.value)} />
+      {/* Stays on screen under the header while the results scroll */}
+      <div style={{ position: "sticky", top: "var(--page-header-h, 0px)", zIndex: 9, background: "var(--bg)", display: "flex", flexDirection: "column", gap: 8, paddingBottom: 6 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            autoFocus
+            placeholder="Search for a food (e.g. adobo, rice)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{ flex: 1, minWidth: 0 }}
+          />
+          <button
+            className="btn btn-secondary"
+            style={{ flexShrink: 0, whiteSpace: "nowrap", height: "auto" }}
+            aria-label="Add your own food"
+            title="Can't find it? Add your own food"
+            onClick={() =>
+              navigate("/nutrition/foods/custom", { state: { ...routeContext, name: query.trim() || undefined } })
+            }
+          >
+            + My Food
+          </button>
+        </div>
 
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-        <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
-        {CATEGORIES.map(([value, label]) => (
-          <CategoryChip key={value} active={category === value} label={label} onClick={() => setCategory(category === value ? null : value)} />
-        ))}
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+          <CategoryChip active={category === null} label="All" onClick={() => setCategory(null)} />
+          {CATEGORIES.map(([value, label]) => (
+            <CategoryChip key={value} active={category === value} label={label} onClick={() => setCategory(category === value ? null : value)} />
+          ))}
+        </div>
       </div>
 
       {loading && <Loading />}
@@ -151,7 +161,20 @@ export default function FoodSearch() {
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
               <span className="stat" style={{ fontSize: 14, display: "block" }}>{Math.round(food.calories)} kcal</span>
-              <VerifiedBadge isVerified={food.is_verified} />
+              <VerifiedBadge food={food} />
+              {food.is_custom && (
+                <button
+                  className="btn btn-secondary"
+                  style={{ display: "block", marginLeft: "auto", marginTop: 6, padding: "3px 10px", fontSize: 12, height: "auto", minHeight: 0 }}
+                  aria-label={`Edit ${food.name}`}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    navigate("/nutrition/foods/custom", { state: { ...routeContext, food } });
+                  }}
+                >
+                  Edit
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -183,15 +206,19 @@ function CategoryChip({ active, label, onClick }) {
   );
 }
 
-function VerifiedBadge({ isVerified }) {
+// Labels the data source (PhilFCT / USDA / Open Food Facts / My food /
+// Estimated). Falls back to the old is_verified flag if an older backend
+// doesn't send source_label yet.
+function VerifiedBadge({ food }) {
+  const label = food.source_label || (food.is_verified ? "PhilFCT" : "Estimated");
   return (
-    <span className={`pill ${isVerified ? "pill-bamboo" : "pill-neutral"}`} style={{ marginTop: 4 }}>
-      {isVerified ? "PhilFCT" : "Estimated"}
+    <span className={`pill ${food.is_verified ? "pill-bamboo" : "pill-neutral"}`} style={{ marginTop: 4 }}>
+      {label}
     </span>
   );
 }
 
-function FoodDetail({ food, logDate, editingEntryId, editingMealType, presetMealType, onBack, onLogged }) {
+function FoodDetail({ food, logDate, editingEntryId, editingMealType, presetMealType, onEdit, onBack, onLogged }) {
   const showToast = useToast();
   // PhilFCT items are stored per-100g -- let people type grams directly
   // instead of doing "1.5 servings of 100g" math in their head. Estimated
@@ -239,6 +266,18 @@ function FoodDetail({ food, logDate, editingEntryId, editingMealType, presetMeal
         subtitle={food.local_name || undefined}
         back
         onBack={onBack}
+        action={
+          food.is_custom ? (
+            <button
+              className="btn btn-secondary"
+              style={{ padding: "6px 12px", fontSize: 13, height: "auto" }}
+              onClick={onEdit}
+              disabled={saving}
+            >
+              Edit food
+            </button>
+          ) : undefined
+        }
       />
 
       {logDate && logDate !== localToday() && (
@@ -251,7 +290,7 @@ function FoodDetail({ food, logDate, editingEntryId, editingMealType, presetMeal
         </p>
       )}
 
-      <VerifiedBadge isVerified={food.is_verified} />
+      <VerifiedBadge food={food} />
 
       <div className="card">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, textAlign: "center" }}>

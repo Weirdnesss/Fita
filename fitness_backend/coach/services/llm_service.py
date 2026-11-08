@@ -16,6 +16,51 @@ from .data_collection_service import DataCollectionService
 PROMPT_FILE = Path(__file__).resolve().parent.parent / "prompts" / "system_prompt.txt"
 DEFAULT_MODEL = "openai/gpt-oss-120b"
 
+# The base prompt file holds the short-answer rules (the default). "detailed"
+# appends an override block, so the user's choice only changes length/style:
+# safety rules, the numbers rule, and app-feature redirects always stay in force.
+#
+# "reminder" is attached to the user's latest message at request time only
+# (never saved). Chat history is sent to the model too, and earlier replies
+# in the other style act like examples it copies -- so a system-prompt
+# instruction alone takes a message or two to win after the user switches.
+# A reminder right next to the newest question is the most recent thing the
+# model reads, so the switch takes effect immediately.
+DEFAULT_DETAIL = "short"
+RESPONSE_MODES = {
+    "short": {
+        "max_tokens": 800,
+        "instructions": "",
+        "reminder": (
+            "[Style for this reply: SHORT. Answer in 2-4 sentences, about 80 words at most, "
+            "with the main point first. Ignore the length of your earlier replies in this chat.]"
+        ),
+    },
+    "detailed": {
+        "max_tokens": 1536,
+        "instructions": (
+            "## RESPONSE MODE: DETAILED\n"
+            "The user has chosen detailed explanations. This replaces the length and style "
+            "limits in \"How to respond\" (the 80/150-word targets, the 2-4 sentence guideline, "
+            "the one-issue limit, and the no-headings rule). Explain thoroughly, up to about "
+            "300 words: cover the reasons behind the advice, give examples where they help, "
+            "and use short paragraphs or bullet lists to keep it readable. "
+            "Keep the safety rules, the rule about only using numbers from the user's data, "
+            "and the app-feature redirects exactly as written."
+        ),
+        "reminder": (
+            "[Style for this reply: DETAILED. Explain thoroughly, up to about 300 words, with the "
+            "reasons behind the advice and examples where they help. Ignore the brevity of your "
+            "earlier replies in this chat. Safety rules and the use-only-given-numbers rule still apply.]"
+        ),
+    },
+}
+
+
+def normalize_detail(value):
+    """Whitelist the client-supplied value; anything unknown falls back to the default."""
+    return value if value in RESPONSE_MODES else DEFAULT_DETAIL
+
 
 class LLMService:
     def __init__(self):
@@ -31,18 +76,24 @@ class LLMService:
         )
         self.model = os.getenv("GROQ_MODEL", DEFAULT_MODEL)
 
-    def _build_system_prompt(self, user):
+    def _build_system_prompt(self, user, detail=DEFAULT_DETAIL):
         base_prompt = PROMPT_FILE.read_text(encoding="utf-8").strip()
         context = DataCollectionService(user).get_full_context()
-        return f"{base_prompt}\n\n{context}"
+        mode_block = RESPONSE_MODES[detail]["instructions"]
+        parts = [base_prompt, context]
+        if mode_block:
+            # Last, so it's the freshest instruction in the system prompt.
+            parts.append(mode_block)
+        return "\n\n".join(parts)
 
-    def get_response(self, chat):
+    def get_response(self, chat, detail=DEFAULT_DETAIL):
         """
         chat: a Chat instance with related `messages` already saved
-        (including the latest user message). Returns the assistant's
-        reply text.
+        (including the latest user message). detail: "short" | "detailed".
+        Returns the assistant's reply text.
         """
-        messages = [{"role": "system", "content": self._build_system_prompt(chat.user)}]
+        detail = normalize_detail(detail)
+        messages = [{"role": "system", "content": self._build_system_prompt(chat.user, detail)}]
 
         # Cap history to keep the context window and Groq's per-minute
         # token limits under control on the free tier -- gpt-oss-120b's
@@ -55,10 +106,18 @@ class LLMService:
         for msg in reversed(list(recent_messages)):
             messages.append({"role": msg.role, "content": msg.content})
 
+        # Attach the style reminder to the newest user message, in this
+        # request only -- the saved message in the database is untouched.
+        if messages[-1]["role"] == "user":
+            messages[-1] = {
+                "role": "user",
+                "content": f"{messages[-1]['content']}\n\n{RESPONSE_MODES[detail]['reminder']}",
+            }
+
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
-            max_completion_tokens=1536,
+            max_completion_tokens=RESPONSE_MODES[detail]["max_tokens"],
             temperature=0.7,
             reasoning_effort="low",
         )

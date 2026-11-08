@@ -79,8 +79,7 @@ class NutritionProfileAutoCalculationTests(APITestCase):
             date_of_birth=datetime.date(1998, 1, 1),
             activity_level="moderately_active",
             current_weight_kg=75,
-            height_ft=5,
-            height_in=10,
+            height_cm=177.8,
         )
         response = self.client.get("/nutrition/daily/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -101,7 +100,7 @@ class NutritionProfileAutoCalculationTests(APITestCase):
         """Once seeded (calculated or default), later profile edits shouldn't silently overwrite user-picked goals."""
         Profile.objects.create(
             user=self.user, gender="male", date_of_birth=datetime.date(1998, 1, 1),
-            activity_level="moderately_active", current_weight_kg=75, height_ft=5, height_in=10,
+            activity_level="moderately_active", current_weight_kg=75, height_cm=177.8,
         )
         self.client.get("/nutrition/daily/")  # first touch -- seeds calculated goals
         nutrition_profile = NutritionProfile.objects.get(user=self.user)
@@ -127,7 +126,7 @@ class AutoRecalculateToggleTests(APITestCase):
         self.user = Account.objects.create_user(email="a@test.com", password="pass12345")
         Profile.objects.create(
             user=self.user, gender="male", date_of_birth=datetime.date(1998, 1, 1),
-            activity_level="moderately_active", current_weight_kg=75, height_ft=5, height_in=10,
+            activity_level="moderately_active", current_weight_kg=75, height_cm=177.8,
         )
         self.client.force_authenticate(user=self.user)
 

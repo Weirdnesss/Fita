@@ -19,7 +19,7 @@ export async function deleteChat(id) {
   await client.delete(`/coach/chats/${id}/`);
 }
 
-export async function sendMessage(chatId, content) {
-  const { data } = await client.post(`/coach/chats/${chatId}/messages/`, { content });
+export async function sendMessage(chatId, content, detail = "short") {
+  const { data } = await client.post(`/coach/chats/${chatId}/messages/`, { content, detail });
   return data;
 }

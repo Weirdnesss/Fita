@@ -62,6 +62,10 @@ class WeightUnit(models.TextChoices):
     KG = "kg", "kg"
     LB = "lb", "lb"
 
+class InputType(models.TextChoices):
+    WEIGHT_REPS = "weight_reps", "Weight and reps"
+    REPS = "reps", "Reps only"
+    TIME = "time", "Time"
 
 class TemplateExercise(models.Model):
     """
@@ -83,6 +87,9 @@ class TemplateExercise(models.Model):
     order = models.PositiveSmallIntegerField(default=0)
     weight_unit = models.CharField(
         max_length=2, choices=WeightUnit.choices, default=WeightUnit.KG
+    )
+    input_type = models.CharField(
+        max_length=15, choices=InputType.choices, default=InputType.WEIGHT_REPS
     )
 
     class Meta:
@@ -139,7 +146,9 @@ class PerformedExercise(models.Model):
     weight_unit = models.CharField(
         max_length=2, choices=WeightUnit.choices, default=WeightUnit.KG
     )
-    # sets_data example: [{"weight": 40, "reps": 10}, {"weight": 42.5, "reps": 8}]
+    input_type = models.CharField(
+        max_length=15, choices=InputType.choices, default=InputType.WEIGHT_REPS
+    )
 
     @property
     def total_sets_performed(self):
@@ -212,6 +221,30 @@ class WgerExercise(models.Model):
     class Meta:
         ordering = ["name"]
         indexes = [models.Index(fields=["name"])]
+
+    def __str__(self):
+        return self.name
+
+class ExerciseVideo(models.Model):
+    """
+    A curated form video for an exercise, matched against the coach
+    chatbot's replies by name (see coach/services/exercise_videos.py).
+    Curated by hand on purpose: form videos are a safety matter for
+    beginners, so each link is vetted rather than taken from a search.
+    """
+
+    name = models.CharField(
+        max_length=100, unique=True,
+        help_text="Lowercase, as it would appear in a sentence, e.g. 'lat pulldown'",
+    )
+    url = models.URLField(max_length=300)
+
+    class Meta:
+        ordering = ["name"]
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.strip().lower()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

@@ -12,7 +12,8 @@ from .serializers import (
     ChatListSerializer,
     SendMessageSerializer,
 )
-from .services.llm_service import LLMService
+from .services.llm_service import LLMService, normalize_detail
+from .services.exercise_videos import find_exercise_videos
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,8 @@ class SendMessageView(APIView):
 
         try:
             llm_service = LLMService()
-            reply_text = llm_service.get_response(chat)
+            detail = normalize_detail(request.data.get("detail"))
+            reply_text = llm_service.get_response(chat, detail=detail)
         except RateLimitError as e:
             # Distinguished from the generic case below because it's a
             # meaningfully different situation for the user: nothing is
@@ -102,6 +104,7 @@ class SendMessageView(APIView):
                 "user_message": user_content,
                 "assistant_message": assistant_message.content,
                 "message_id": assistant_message.id,
+                "videos": find_exercise_videos(assistant_message.content),
             },
             status=status.HTTP_201_CREATED,
         )

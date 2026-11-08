@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Loading, ErrorBanner, extractErrorMessage } from "../../components/Status";
 import { getNutritionTrends, getNutritionProfile } from "../../api/nutrition";
 import SegmentedControl from "../../components/SegmentedControl";
+import Pinned from "../../components/Pinned";
 
 const PERIODS = [
   ["week", "This Week"],
@@ -46,9 +47,15 @@ export default function NutritionTrendsPanel() {
     <div className="nutrition-trends" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <ErrorBanner message={error} />
 
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <Pinned
+        style={{
+          top: "calc(var(--page-header-h, 0px) + var(--nutrition-tabs-h, 0px))",
+          flexDirection: "row",
+          justifyContent: "flex-end",
+        }}
+      >
         <SegmentedControl options={PERIODS} value={period} onChange={setPeriod} />
-      </div>
+      </Pinned>
 
       {!trends && !error && <Loading />}
 

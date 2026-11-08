@@ -7,6 +7,7 @@ import { useToast } from "../../context/ToastContext";
 import { listReports, generateReport, deleteReport, getReportSettings, REPORT_FAILURE_MESSAGE } from "../../api/progress";
 import SettingsButton from "../../components/SettingsButton";
 import { nextReportInfo } from "../../lib/reports";
+import StickyBar from "../../components/StickyBar";
 
 const REPORTS_PAGE_SIZE = 10;
 
@@ -162,7 +163,7 @@ export default function ReportsList() {
           </p>
         </div>
       )}
-
+      <StickyBar> 
       <div className="page-actions">
         <button
           className="btn btn-primary btn-block"
@@ -172,6 +173,7 @@ export default function ReportsList() {
           {generating ? "Generating..." : cooldown > 0 ? `Try again in ${cooldown}s` : "Generate Report"}
         </button>
       </div>
+      </StickyBar>
       {nextReport?.kind === "scheduled" && (
         <p style={{ fontSize: 12, color: "var(--text-faint)", textAlign: "right" }}>
           Next automatic report due {nextReport.text}

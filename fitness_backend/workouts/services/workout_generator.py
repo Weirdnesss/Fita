@@ -39,6 +39,7 @@ from django.utils import timezone
 from accounts.models import PrimaryGoal, WorkoutFrequency, WorkoutLocation
 from ..models import (
     DayType,
+    InputType,
     TemplateExercise,
     TemplateKind,
     WeightUnit,
@@ -197,8 +198,16 @@ COMMON_EXERCISE_KEYWORDS = {
         "bench press", "push-up", "push up", "chest press", "incline press",
         "chest fly", "dumbbell fly", "cable fly",
     ],
+    # wger names the same movement many ways ("Lat Pull Down", "Lat Pulldown",
+    # "Wide-grip Pulldown"...), so this list is deliberately wider than the
+    # others. Home-friendly staples (dumbbell rows, band pull-aparts, face
+    # pulls, supermans) are included so a home workout isn't left without
+    # any Back exercise. Pull-ups/chin-ups stay out: too hard for beginners.
     "Back": [
-        "lat pulldown", "seated row", "bent over row", "cable row",
+        "lat pulldown", "lat pull down", "pulldown", "seated row", "bent over row",
+        "cable row", "dumbbell row", "single-arm row", "single arm row",
+        "one-arm row", "one arm row", "helms row", "low row", "face pull",
+        "band pull-apart", "superman", "back extension", "hyperextension",
     ],
     "Legs": [
         "squat", "leg press", "lunge", "leg extension", "leg curl",
@@ -339,6 +348,47 @@ def _pick_exercises_for_category(
     rng.shuffle(pool)
     return pool[:count]
 
+# Exercises logged as time (seconds) rather than weight x reps.
+TIME_EXERCISE_KEYWORDS = ["plank", "wall sit", "wall squat", "dead hang", "isometric", "hold"]
+
+# Equipment that means added resistance. Checked first, so a loaded
+# movement stays weight x reps even if its name looks like a hold or a
+# bodyweight move (e.g. a kettlebell plank-to-row).
+LOADED_EQUIPMENT = {"dumbbell", "kettlebell", "barbell", "sz-bar"}
+
+# Names that signal added resistance, so they stay weight x reps even when
+# wger lists no equipment for them.
+WEIGHTED_NAME_KEYWORDS = ["cable", "machine", "weighted", "dumbbell", "barbell", "kettlebell", "band"]
+
+# Bodyweight exercises logged as reps only. wger's equipment field alone
+# isn't enough (a pull-up lists "Pull-up bar"), so common ones match by name.
+REPS_ONLY_NAME_KEYWORDS = [
+    "push-up", "push up", "pull-up", "pull up", "chin-up", "chin up",
+    "sit-up", "sit up", "crunch", "leg raise", "dip", "burpee",
+    "mountain climber", "jumping jack", "bodyweight",
+]
+BODYWEIGHT_EQUIPMENT = {"none (bodyweight exercise)", "gym mat"}
+
+
+def infer_input_type(name, category_name="", equipment_name=""):
+    """
+    Decides how an exercise is logged. Decided once, when the exercise is
+    added to a routine, and stored on the row -- users can switch it later.
+    Defaults to weight x reps (the original behavior) when unsure.
+    """
+    parts = [p.strip().lower() for p in (equipment_name or "").split(",") if p.strip()]
+    if any(p in LOADED_EQUIPMENT for p in parts):
+        return InputType.WEIGHT_REPS
+    if _name_has_keyword(name, TIME_EXERCISE_KEYWORDS) or (category_name or "").lower() == "cardio":
+        return InputType.TIME
+    if _name_has_keyword(name, WEIGHTED_NAME_KEYWORDS):
+        return InputType.WEIGHT_REPS
+    if _name_has_keyword(name, REPS_ONLY_NAME_KEYWORDS):
+        return InputType.REPS
+    if parts and all(p in BODYWEIGHT_EQUIPMENT for p in parts):
+        return InputType.REPS
+    return InputType.WEIGHT_REPS
+
 def _weight_unit_for(wger_ex):
     return WeightUnit.LB if "dumbbell" in wger_ex.equipment_name.lower() else WeightUnit.KG
 
@@ -378,6 +428,7 @@ def _populate_template(
                 target_sets=target_sets,
                 order=order,
                 weight_unit=_weight_unit_for(wger_ex),
+                input_type=infer_input_type(wger_ex.name, wger_ex.category_name, wger_ex.equipment_name),
             )
             order += 1
     return template.exercises.count()
@@ -519,10 +570,93 @@ def swap_exercise(template, exercise):
     exercise.category_name = new_exercise.category_name
     exercise.equipment_name = new_exercise.equipment_name
     exercise.weight_unit = _weight_unit_for(new_exercise)
+    exercise.input_type = infer_input_type(
+        new_exercise.name, new_exercise.category_name, new_exercise.equipment_name
+    )
     exercise.save(
         update_fields=[
             "wger_exercise_id", "exercise_name", "category_name",
-            "equipment_name", "weight_unit",
+            "equipment_name", "weight_unit", "input_type",
         ]
     )
     return exercise
+
+def _condition_exclusions(profile):
+    """(excluded categories, excluded exercise-name keywords) from the profile's medical_conditions."""
+    excluded_categories = set()
+    excluded_keywords = set()
+    for kw in _condition_keywords(profile.medical_conditions if profile else ""):
+        excluded_categories.update(CONDITION_EXCLUDED_CATEGORIES.get(kw, []))
+        excluded_keywords.update(CONDITION_EXCLUDED_EXERCISE_KEYWORDS.get(kw, []))
+    return excluded_categories, excluded_keywords
+
+
+def get_addable_exercises(template, category=None, term=""):
+    """
+    Exercises a user may add to a GENERATED template: the same beginner-safe
+    pool generation and swapping use (_safe_candidates), limited to the
+    template's day-type categories, minus categories/exercises excluded by
+    the user's medical_conditions, minus anything already in the template.
+    Returns (allowed_categories, [WgerExercise]).
+    """
+    profile = getattr(template.user, "profile", None)
+    location = (profile.workout_location if profile else "") or WorkoutLocation.GYM
+    excluded_categories, excluded_keywords = _condition_exclusions(profile)
+
+    categories = [
+        c for c in DAY_TYPE_CATEGORIES.get(template.day_type, [])
+        if c not in excluded_categories
+    ]
+    existing_ids = set(template.exercises.values_list("wger_exercise_id", flat=True))
+
+    results = []
+    for cat in categories:
+        if category and cat.lower() != category.lower():
+            continue
+        results.extend(
+            _safe_candidates(
+                cat, location,
+                exclude_ids=existing_ids,
+                extra_exclude_keywords=excluded_keywords,
+            )
+        )
+    if term:
+        results = [ex for ex in results if term.lower() in ex.name.lower()]
+    results.sort(key=lambda ex: ex.name)
+    return categories, results
+
+def suggest_exercise_for_template(template, rng=None):
+    """
+    Picks one beginner-safe exercise to add to a generated template: from
+    the day-type category with the fewest exercises in the routine so far
+    (random tie-break), using the same safe pool as generation and swapping.
+    Raises WorkoutGeneratorError if nothing is left to suggest.
+    """
+    rng = rng or random.Random()
+    profile = getattr(template.user, "profile", None)
+    location = (profile.workout_location if profile else "") or WorkoutLocation.GYM
+    excluded_categories, excluded_keywords = _condition_exclusions(profile)
+
+    categories = [
+        c for c in DAY_TYPE_CATEGORIES.get(template.day_type, [])
+        if c not in excluded_categories
+    ]
+    existing = list(template.exercises.values_list("wger_exercise_id", "category_name"))
+    existing_ids = {ex_id for ex_id, _ in existing}
+    counts = {}
+    for _, cat in existing:
+        counts[cat.lower()] = counts.get(cat.lower(), 0) + 1
+
+    rng.shuffle(categories)
+    categories.sort(key=lambda c: counts.get(c.lower(), 0))
+
+    for cat in categories:
+        pool = _safe_candidates(
+            cat, location,
+            exclude_ids=existing_ids,
+            extra_exclude_keywords=excluded_keywords,
+        )
+        if pool:
+            return rng.choice(pool)
+
+    raise WorkoutGeneratorError("No more suggested exercises are available for this routine.")

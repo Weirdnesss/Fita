@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { updateProfile } from "../api/accounts";
@@ -8,6 +8,9 @@ import UnitToggle from "../components/UnitToggle";
 import { ErrorBanner, extractErrorMessage } from "../components/Status";
 import { useToast } from "../context/ToastContext";
 import DatePicker from "../components/DatePicker";
+import ThemeToggle from "../components/ThemeToggle";
+import Pinned from "../components/Pinned";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 const GENDERS = [
   ["male", "Male"],
@@ -74,6 +77,12 @@ export default function EditProfile() {
   const [form, setForm] = useState(() => initialFormFrom(user?.profile || {}));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+
+  // Leaving (back arrow or Cancel) with edits that weren't saved asks first.
+  const initialForm = useRef(form);
+  const dirty = JSON.stringify(form) !== JSON.stringify(initialForm.current);
+  const leave = () => (dirty ? setConfirmingLeave(true) : navigate("/profile"));
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
@@ -108,8 +117,8 @@ export default function EditProfile() {
 
   return (
     <div className="page">
-      <PageHeader title="Edit Profile" back backTo="/profile" />
-
+      <PageHeader title="Edit Profile" back onBack={leave} />
+      <ThemeToggle />
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
@@ -199,11 +208,23 @@ export default function EditProfile() {
         </div>
 
         <ErrorBanner message={error} />
-        <div style={row2}>
-          <button type="button" className="btn btn-secondary" onClick={() => navigate("/profile")}>Cancel</button>
+        <Pinned bottom style={row2}>
+          <button type="button" className="btn btn-secondary" onClick={leave}>Cancel</button>
           <button className="btn btn-primary" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
-        </div>
+        </Pinned>
       </form>
+
+      <ConfirmDialog
+        open={confirmingLeave}
+        title="Discard changes"
+        message="You have unsaved changes. Discard them?"
+        confirmLabel="Discard"
+        onConfirm={() => {
+          setConfirmingLeave(false);
+          navigate("/profile");
+        }}
+        onCancel={() => setConfirmingLeave(false)}
+      />
     </div>
   );
 }

@@ -3,8 +3,20 @@ from rest_framework import serializers
 from .models import DailyEntry, FoodEntry, FoodItem, NutritionProfile
 
 
+SOURCE_LABELS = {
+    "philfct": "PhilFCT",
+    "usda": "USDA",
+    "openfoodfacts": "Open Food Facts",
+    "user": "My food",
+    "estimated": "Estimated",
+}
+
+
 class FoodItemSerializer(serializers.ModelSerializer):
     is_verified = serializers.SerializerMethodField()
+    source_type = serializers.ReadOnlyField()
+    source_label = serializers.SerializerMethodField()
+    is_custom = serializers.SerializerMethodField()
 
     class Meta:
         model = FoodItem
@@ -22,12 +34,85 @@ class FoodItemSerializer(serializers.ModelSerializer):
             "fiber_g",
             "sodium_mg",
             "source",
+            "source_type",
+            "source_label",
+            "is_custom",
             "is_verified",
         ]
 
     def get_is_verified(self, obj):
-        """True for real PhilFCT-sourced rows, False for hand-estimated dishes."""
+        """True for real PhilFCT-sourced rows only (kept for existing clients).
+        New UI should use source_type / source_label instead, since USDA and
+        Open Food Facts rows are real data too, just not Filipino-sourced."""
         return obj.source.startswith("PhilFCT")
+
+    def get_source_label(self, obj):
+        return SOURCE_LABELS[obj.source_type]
+
+    def get_is_custom(self, obj):
+        return obj.created_by_id is not None
+
+
+class CustomFoodSerializer(serializers.ModelSerializer):
+    """
+    Create/edit a user's own food, from a nutrition label or a home recipe.
+    Everything is per `serving_description` (e.g. '1 pack (60 g)'), matching
+    how FoodItem rows are stored. Bounds are sanity guards against typos,
+    not nutrition advice.
+    """
+
+    # If the macros imply a calorie figure this far from the stated one,
+    # the entry is almost certainly a typo (a misplaced decimal, label
+    # values for the wrong serving size). 40% leaves room for fiber,
+    # sugar alcohols and rounding on real labels.
+    MAX_CALORIE_MISMATCH = 0.40
+    MIN_CALORIES_TO_CHECK = 50
+
+    name = serializers.CharField(max_length=200)
+    serving_description = serializers.CharField(max_length=100)
+    serving_size_g = serializers.FloatField(min_value=1, max_value=2000)
+    calories = serializers.FloatField(min_value=0, max_value=3000)
+    protein_g = serializers.FloatField(min_value=0, max_value=500)
+    carbs_g = serializers.FloatField(min_value=0, max_value=500)
+    fat_g = serializers.FloatField(min_value=0, max_value=500)
+    fiber_g = serializers.FloatField(min_value=0, max_value=500, required=False, allow_null=True)
+    sodium_mg = serializers.FloatField(min_value=0, max_value=50000, required=False, allow_null=True)
+
+    class Meta:
+        model = FoodItem
+        fields = [
+            "id",
+            "name",
+            "category",
+            "serving_description",
+            "serving_size_g",
+            "calories",
+            "protein_g",
+            "carbs_g",
+            "fat_g",
+            "fiber_g",
+            "sodium_mg",
+        ]
+
+    def validate(self, attrs):
+        # On PATCH, validate against the merged result, not just the sent fields.
+        merged = {
+            f: attrs.get(f, getattr(self.instance, f, None))
+            for f in ("calories", "protein_g", "carbs_g", "fat_g")
+        }
+        calories = merged["calories"]
+        if calories is not None and calories >= self.MIN_CALORIES_TO_CHECK:
+            implied = (
+                (merged["protein_g"] or 0) * 4
+                + (merged["carbs_g"] or 0) * 4
+                + (merged["fat_g"] or 0) * 9
+            )
+            if abs(implied - calories) / calories > self.MAX_CALORIE_MISMATCH:
+                raise serializers.ValidationError(
+                    "Calories don't match the protein/carbs/fat you entered. "
+                    "Double-check the serving size and the numbers from the label."
+                )
+        return attrs
 
 
 class NutritionProfileSerializer(serializers.ModelSerializer):
