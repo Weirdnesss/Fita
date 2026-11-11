@@ -84,7 +84,9 @@ export default function Onboarding() {
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [weightUnit, setWeightUnit] = useState(() => (user?.profile?.unit_system === "imperial" ? "lbs" : "kg"));
+  // One unit system drives weight and height together, same as Edit Profile, and is saved to the profile.
+  const [unitSystem, setUnitSystem] = useState(() => (user?.profile?.unit_system === "imperial" ? "imperial" : "metric"));
+  const weightUnit = unitSystem === "imperial" ? "lbs" : "kg";
 
   const [form, setForm] = useState(() => initialFormFrom(user?.profile || {}));
   // Going Back and pressing Continue again must not log the same weight twice.
@@ -104,6 +106,7 @@ export default function Onboarding() {
         goal_weight_kg: form.goalWeightKg ? Number(form.goalWeightKg) : null,
         height_cm: form.heightCm ? Number(form.heightCm) : null,
         primary_goal: form.primaryGoal,
+        unit_system: unitSystem,
       });
       // current_weight_kg is derived, not writable directly (see
       // ProfileSerializer) -- logging it here is what both sets the
@@ -177,14 +180,30 @@ export default function Onboarding() {
                   max={todayStr()}
                 />
               </div>
+            </div>            
+            <div style={row2}>
+              <div>
+                <label>Activity level</label>
+                <select required value={form.activityLevel} onChange={set("activityLevel")}>
+                  <option value="">Select</option>
+                  {ACTIVITY_LEVELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div>
+                <label>Primary goal</label>
+                <select required value={form.primaryGoal} onChange={set("primaryGoal")}>
+                  <option value="">Select</option>
+                  {GOALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: "var(--text-dim)" }}>Weight unit</span>
+              <span style={{ fontSize: 13, color: "var(--text-dim)" }}>Units (weight and height)</span>
               <UnitToggle
-                options={[{ value: "kg", label: "kg" }, { value: "lbs", label: "lbs" }]}
-                value={weightUnit}
-                onChange={setWeightUnit}
+                options={[{ value: "metric", label: "Metric" }, { value: "imperial", label: "Imperial" }]}
+                value={unitSystem}
+                onChange={setUnitSystem}
               />
             </div>
 
@@ -212,25 +231,11 @@ export default function Onboarding() {
                 />
               </div>
             </div>
-            <div style={row2}>
-              <div>
-                <label>Activity level</label>
-                <select required value={form.activityLevel} onChange={set("activityLevel")}>
-                  <option value="">Select</option>
-                  {ACTIVITY_LEVELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </div>
-              <div>
-                <label>Primary goal</label>
-                <select required value={form.primaryGoal} onChange={set("primaryGoal")}>
-                  <option value="">Select</option>
-                  {GOALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </div>
-            </div>
             <HeightField
               required
-              defaultUnit={user?.profile?.unit_system === "imperial" ? "ftin" : "cm"}
+              key={unitSystem}
+              defaultUnit={unitSystem === "imperial" ? "ftin" : "cm"}
+              allowToggle={false}
               cm={form.heightCm}
               onChange={(cm) => setForm((f) => ({ ...f, heightCm: cm }))}
             />
