@@ -639,7 +639,7 @@ export default function ActiveWorkout() {
                   `${finishWarning.unchecked} set${finishWarning.unchecked === 1 ? " has" : "s have"} numbers entered but ${finishWarning.unchecked === 1 ? "isn't" : "aren't"} checked off, so ${finishWarning.unchecked === 1 ? "it" : "they"} won't be saved.`,
                 finishWarning.skipped > 0 &&
                   `${finishWarning.skipped} exercise${finishWarning.skipped === 1 ? " has" : "s have"} no sets checked off and will be skipped.`,
-                "A finished workout can't be edited later.",
+                "Are you sure you want to finish this workout?",
               ]
                 .filter(Boolean)
                 .join(" ")

@@ -99,6 +99,19 @@ export async function getHistoryDetail(id) {
   return data;
 }
 
+// Correct a recent workout (the backend allows 7 days): { note?, exercises?: [{ id, sets_data }] }.
+export async function updateHistory(id, { note, exercises }) {
+  const payload = {};
+  if (note !== undefined) payload.note = note;
+  if (exercises) payload.exercises = exercises;
+  const { data } = await client.patch(`/workouts/history/${id}/`, payload);
+  return data;
+}
+
+export async function deleteHistory(id) {
+  await client.delete(`/workouts/history/${id}/`);
+}
+
 export async function finishWorkout({ templateTitle, startedAt, exercises, note }) {
   const { data } = await client.post("/workouts/history/", {
     template_title: templateTitle,

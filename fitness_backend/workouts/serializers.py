@@ -46,8 +46,24 @@ class PerformedExerciseSerializer(serializers.ModelSerializer):
         ]
 
 
+# A finished workout can be corrected for this many days after it was completed. Matches the 7-day window
+# for backdating/editing food entries (nutrition.views.MAX_BACKDATE_DAYS): later than that, "fixing" a
+# number is more likely rewriting history than correcting a typo.
+MAX_EDIT_DAYS = 7
+
+
+def edit_window_start():
+    """Oldest completion date that can still be edited today."""
+    return timezone.localdate() - timezone.timedelta(days=MAX_EDIT_DAYS)
+
+
+def history_is_editable(history):
+    return timezone.localdate(history.completed_at) >= edit_window_start()
+
+
 class TemplateHistorySerializer(serializers.ModelSerializer):
     performed_exercises = PerformedExerciseSerializer(many=True, read_only=True)
+    is_editable = serializers.SerializerMethodField()
     duration_minutes = serializers.ReadOnlyField()
     total_exercises = serializers.ReadOnlyField()
     total_sets = serializers.ReadOnlyField()
@@ -63,8 +79,12 @@ class TemplateHistorySerializer(serializers.ModelSerializer):
             "total_exercises",
             "total_sets",
             "note",
+            "is_editable",
             "performed_exercises",
         ]
+
+    def get_is_editable(self, obj):
+        return history_is_editable(obj)
 
 
 class LoggedSetSerializer(serializers.Serializer):
@@ -130,3 +150,18 @@ class FinishWorkoutSerializer(serializers.Serializer):
                 "Log at least one set before finishing the workout."
             )
         return with_sets
+
+
+class EditPerformedExerciseSerializer(serializers.Serializer):
+    """New sets for one exercise already in a finished workout. The exercise itself (name, input type, unit)
+    can't change -- only the numbers -- and its sets are checked against its own input_type in the view."""
+
+    id = serializers.IntegerField()
+    sets_data = LoggedSetSerializer(many=True, allow_empty=False)
+
+
+class EditWorkoutSerializer(serializers.Serializer):
+    """Payload for PATCH /workouts/history/<id>/. Both fields are optional."""
+
+    note = serializers.CharField(max_length=1000, required=False, allow_blank=True)
+    exercises = EditPerformedExerciseSerializer(many=True, required=False)

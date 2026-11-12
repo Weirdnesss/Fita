@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404
@@ -9,9 +10,14 @@ from datetime import timedelta
 
 from .models import InputType, PerformedExercise, TemplateExercise, TemplateHistory, WeightUnit, WgerExercise, WorkoutTemplate
 from .serializers import (
+    MAX_EDIT_DAYS,
+    REQUIRED_SET_FIELDS,
+    EditWorkoutSerializer,
     FinishWorkoutSerializer,
     TemplateHistorySerializer,
     WorkoutTemplateSerializer,
+    edit_window_start,
+    history_is_editable,
 )
 from .services.workout_generator import (
     MAX_SETS,
@@ -475,17 +481,76 @@ class WorkoutHistoryView(generics.ListAPIView):
         )
 
 
-class WorkoutHistoryDetailView(generics.RetrieveAPIView):
+class WorkoutHistoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
-    GET /workouts/history/<id>/ -- one completed session, with every
-    logged exercise and its sets. Used by the read-only history detail
-    page.
+    GET    /workouts/history/<id>/ -- one completed session, with every logged exercise and its sets.
+    PATCH  /workouts/history/<id>/ -- correct a recent session: the note and/or the sets of exercises that are
+           already in it. Only allowed for MAX_EDIT_DAYS after the workout was completed. Exercises can't be
+           added or renamed, and the start/finish times never change.
+    DELETE /workouts/history/<id>/ -- remove a session. Like deleting a food entry, this is not time-limited.
     """
 
     serializer_class = TemplateHistorySerializer
+    http_method_names = ["get", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         return TemplateHistory.objects.filter(user=self.request.user)
+
+    def patch(self, request, *args, **kwargs):
+        history = self.get_object()
+        if not history_is_editable(history):
+            return Response(
+                {
+                    "error": f"Workouts can only be edited for {MAX_EDIT_DAYS} days after they're finished.",
+                    "oldest_editable_date": edit_window_start().isoformat(),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = EditWorkoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        performed = {pe.id: pe for pe in history.performed_exercises.all()}
+        updates = []
+        seen = set()
+        for item in data.get("exercises", []):
+            pe = performed.get(item["id"])
+            if pe is None:
+                return Response(
+                    {"error": "That exercise isn't part of this workout."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if pe.id in seen:
+                return Response(
+                    {"error": "Each exercise can only appear once."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            seen.add(pe.id)
+
+            needed = REQUIRED_SET_FIELDS[pe.input_type]
+            cleaned = []
+            for s in item["sets_data"]:
+                if any(field not in s for field in needed):
+                    return Response(
+                        {"error": f"Each set of {pe.exercise_name} needs: {', '.join(needed)}."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                # Keep only the fields that belong to this exercise's input type.
+                keep = set(needed) | ({"display_weight"} if "weight" in needed else set())
+                cleaned.append({k: v for k, v in s.items() if k in keep})
+            updates.append((pe, cleaned))
+
+        with transaction.atomic():
+            if "note" in data:
+                history.note = data["note"]
+                history.save(update_fields=["note"])
+            for pe, cleaned in updates:
+                pe.sets_data = cleaned
+                pe.save(update_fields=["sets_data"])
+
+        history = self.get_queryset().get(pk=history.pk)
+        return Response(TemplateHistorySerializer(history).data)
 
 
 class GenerateWorkoutView(APIView):
