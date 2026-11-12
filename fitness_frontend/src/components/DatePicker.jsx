@@ -51,7 +51,7 @@ function daysInMonth(year, month) {
  * field's bounding box: it opens below when there's room, above when
  * there isn't, and is always clamped inside the viewport.
  */
-export default function DatePicker({ label, value, onChange, min, max, placeholder = "Select date", required = false }) {
+export default function DatePicker({ label, value, onChange, min, max, placeholder = "Select date", required = false, markedDates = [], onViewChange }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState("days"); // days | months | years
   const [pos, setPos] = useState(null); // { top, left, width } in viewport px
@@ -99,6 +99,12 @@ export default function DatePicker({ label, value, onChange, min, max, placehold
     }
     updatePosition();
   }, [open, view, viewMonth, viewYear]);
+
+  // Tell the parent which month is showing so it can supply markedDates
+  // (days to mark with a dot). Optional: without the props nothing changes.
+  useEffect(() => {
+    if (open && onViewChange) onViewChange(viewYear, viewMonth);
+  }, [open, viewYear, viewMonth]);
 
   useEffect(() => {
     if (!open) return;
@@ -195,6 +201,7 @@ export default function DatePicker({ label, value, onChange, min, max, placehold
   for (let d = 1; d <= totalDays; d++) dayCells.push(d);
 
   const todayVal = toDateStr(new Date());
+  const marked = new Set(markedDates);
   const years = Array.from({ length: 12 }, (_, i) => viewYear - 5 + i);
 
   const popup = open ? (
@@ -260,9 +267,25 @@ export default function DatePicker({ label, value, onChange, min, max, placehold
                     fontSize: 13,
                     fontWeight: isSelected ? 700 : 500,
                     cursor: disabled ? "not-allowed" : "pointer",
+                    position: "relative",
                   }}
                 >
                   {d}
+                  {marked.has(dStr) && (
+                    <span
+                      aria-label="Has logged entries"
+                      style={{
+                        position: "absolute",
+                        bottom: 4,
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        width: 5,
+                        height: 5,
+                        borderRadius: "50%",
+                        background: isSelected ? "#fff" : "var(--chili)",
+                      }}
+                    />
+                  )}
                 </button>
               );
             })}

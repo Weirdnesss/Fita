@@ -29,6 +29,12 @@ export async function getDailyEntry(date) {
   return data;
 }
 
+// Dates in a month ("2026-11") that have at least one logged food.
+export async function getLoggedDates(month) {
+  const { data } = await client.get("/nutrition/daily/dates/", { params: { month } });
+  return data;
+}
+
 export async function logFood({ foodItemId, mealType, servings, date }) {
   const { data } = await client.post("/nutrition/entries/", {
     food_item: foodItemId,

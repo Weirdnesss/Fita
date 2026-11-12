@@ -4,7 +4,7 @@ import PageHeader from "../../components/PageHeader";
 import { Loading, ErrorBanner, EmptyState, extractErrorMessage } from "../../components/Status";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useToast } from "../../context/ToastContext";
-import { getDailyEntry, getNutritionProfile, deleteFoodEntry, updateFoodEntry } from "../../api/nutrition";
+import { getDailyEntry, getLoggedDates, getNutritionProfile, deleteFoodEntry, updateFoodEntry } from "../../api/nutrition";
 import { getMe } from "../../api/accounts";
 import DatePicker from "../../components/DatePicker";
 import NutritionTrendsPanel from "./NutritionTrendsPanel";
@@ -48,6 +48,19 @@ export default function NutritionDashboard() {
     () => location.state?.date || toDateStr(new Date())
   );  
   const [activeTab, setActiveTab] = useState("log"); // "log" | "trends"
+
+  // Logged days per month, for the dots in the date picker: { "2026-11": ["2026-11-03", ...] }.
+  // Keyed by month so a slow response for one month can't overwrite another.
+  const [loggedByMonth, setLoggedByMonth] = useState({});
+  async function loadLoggedDates(year, month) {
+    const key = `${year}-${String(month + 1).padStart(2, "0")}`;
+    try {
+      const res = await getLoggedDates(key);
+      setLoggedByMonth((prev) => ({ ...prev, [key]: res.dates }));
+    } catch {
+      // The dots are a nicety; the picker works without them.
+    }
+  }
 
   const isToday = selectedDate === toDateStr(new Date());
   const isWithinLogWindow = daysAgo(selectedDate) <= MAX_BACKDATE_DAYS;
@@ -276,6 +289,8 @@ export default function NutritionDashboard() {
             onChange={setSelectedDate}
             min={accountStartDate}
             max={toDateStr(new Date())}
+            markedDates={Object.values(loggedByMonth).flat()}
+            onViewChange={loadLoggedDates}
           />
         </div>
 

@@ -572,6 +572,38 @@ class DailyEntryView(APIView):
             )
         return Response(DailyEntrySerializer(daily_entry).data)
 
+class LoggedDatesView(APIView):
+    """
+    GET /nutrition/daily/dates/?month=2026-11
+    The dates in that month that have at least one logged food. Feeds the
+    dots in the Nutrition date picker. A DailyEntry row can outlive its
+    foods (every entry deleted), so days are counted by food entries.
+    """
+
+    def get(self, request):
+        month = request.query_params.get("month", "")
+        try:
+            year_str, month_str = month.split("-")
+            year, mon = int(year_str), int(month_str)
+            timezone.datetime(year, mon, 1)  # validates the range
+        except (ValueError, TypeError):
+            return Response({"detail": "month must look like 2026-11."}, status=status.HTTP_400_BAD_REQUEST)
+
+        nutrition_profile, _ = get_or_create_nutrition_profile(request.user)
+        dates = (
+            DailyEntry.objects.filter(
+                nutrition_profile=nutrition_profile,
+                date__year=year,
+                date__month=mon,
+                food_entries__isnull=False,
+            )
+            .order_by("date")
+            .values_list("date", flat=True)
+            .distinct()
+        )
+        return Response({"dates": [d.isoformat() for d in dates]})
+
+
 class NutritionTrendsView(APIView):
     """
     GET /nutrition/trends/?period=week|month
