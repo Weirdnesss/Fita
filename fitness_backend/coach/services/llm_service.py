@@ -12,6 +12,7 @@ from pathlib import Path
 from openai import OpenAI
 
 from .data_collection_service import DataCollectionService
+from .pain_guard import PAIN_MAX_TOKENS, PAIN_REMINDER, PAIN_SYSTEM_BLOCK, is_pain_conversation
 
 PROMPT_FILE = Path(__file__).resolve().parent.parent / "prompts" / "system_prompt.txt"
 DEFAULT_MODEL = "openai/gpt-oss-120b"
@@ -37,7 +38,7 @@ RESPONSE_MODES = {
         ),
     },
     "detailed": {
-        "max_tokens": 1536,
+        "max_tokens": 700,
         "instructions": (
             "## RESPONSE MODE: DETAILED\n"
             "The user has chosen detailed explanations. This replaces the length and style "
@@ -45,13 +46,14 @@ RESPONSE_MODES = {
             "the one-issue limit, and the no-headings rule). Explain thoroughly, up to about "
             "300 words: cover the reasons behind the advice, give examples where they help, "
             "and use short paragraphs or bullet lists to keep it readable. "
-            "Keep the safety rules, the rule about only using numbers from the user's data, "
+            "Never exceed 300 words, even for complex questions: cut lower-priority points instead of running long. "
+            "Keep the safety rules, the scope and beginner-level rules, the rule about only using numbers from the user's data, "
             "and the app-feature redirects exactly as written."
         ),
         "reminder": (
             "[Style for this reply: DETAILED. Explain thoroughly, up to about 300 words, with the "
             "reasons behind the advice and examples where they help. Ignore the brevity of your "
-            "earlier replies in this chat. Safety rules and the use-only-given-numbers rule still apply.]"
+            "earlier replies in this chat. Hard limit: 300 words. Safety, scope, beginner-level and use-only-given-numbers rules still apply.]"
         ),
     },
 }
@@ -76,7 +78,7 @@ class LLMService:
         )
         self.model = os.getenv("GROQ_MODEL", DEFAULT_MODEL)
 
-    def _build_system_prompt(self, user, detail=DEFAULT_DETAIL):
+    def _build_system_prompt(self, user, detail=DEFAULT_DETAIL, pain_mode=False):
         base_prompt = PROMPT_FILE.read_text(encoding="utf-8").strip()
         context = DataCollectionService(user).get_full_context()
         mode_block = RESPONSE_MODES[detail]["instructions"]
@@ -84,6 +86,8 @@ class LLMService:
         if mode_block:
             # Last, so it's the freshest instruction in the system prompt.
             parts.append(mode_block)
+        if pain_mode:
+            parts.append(PAIN_SYSTEM_BLOCK)
         return "\n\n".join(parts)
 
     def get_response(self, chat, detail=DEFAULT_DETAIL):
@@ -93,7 +97,15 @@ class LLMService:
         Returns the assistant's reply text.
         """
         detail = normalize_detail(detail)
-        messages = [{"role": "system", "content": self._build_system_prompt(chat.user, detail)}]
+        # Rule-based guard: pain or injury talk always gets a short, fixed-shape
+        # reply, whatever the Detailed setting says (see pain_guard.py).
+        recent_user_texts = [
+            m.content for m in chat.messages.filter(role="user").order_by("-created_at")[:2]
+        ]
+        pain_mode = is_pain_conversation(recent_user_texts)
+        if pain_mode:
+            detail = "short"
+        messages = [{"role": "system", "content": self._build_system_prompt(chat.user, detail, pain_mode)}]
 
         # Cap history to keep the context window and Groq's per-minute
         # token limits under control on the free tier -- gpt-oss-120b's
@@ -111,13 +123,13 @@ class LLMService:
         if messages[-1]["role"] == "user":
             messages[-1] = {
                 "role": "user",
-                "content": f"{messages[-1]['content']}\n\n{RESPONSE_MODES[detail]['reminder']}",
+                "content": f"{messages[-1]['content']}\n\n{PAIN_REMINDER if pain_mode else RESPONSE_MODES[detail]['reminder']}",
             }
 
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
-            max_completion_tokens=RESPONSE_MODES[detail]["max_tokens"],
+            max_completion_tokens=PAIN_MAX_TOKENS if pain_mode else RESPONSE_MODES[detail]["max_tokens"],
             temperature=0.7,
             reasoning_effort="low",
         )
