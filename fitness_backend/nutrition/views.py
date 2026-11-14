@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.db import transaction
+from django.http import Http404
 from django.db.models import Case, IntegerField, Q, Sum, Value, When
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -305,7 +307,19 @@ class CustomFoodDetailView(generics.GenericAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class FoodSuggestionsView(APIView):
+class FoodSuggestionsGateMixin:
+    """
+    Food and meal suggestions are switched off unless FOOD_SUGGESTIONS_ENABLED is true
+    (environment variable, default off). The code stays in place; the endpoints answer 404.
+    """
+
+    def initial(self, request, *args, **kwargs):
+        if not getattr(settings, "FOOD_SUGGESTIONS_ENABLED", False):
+            raise Http404
+        return super().initial(request, *args, **kwargs)
+
+
+class FoodSuggestionsView(FoodSuggestionsGateMixin, APIView):
     """
     GET /nutrition/suggestions/?meal_type=lunch&date=2026-10-19&limit=4&explain=true&exclude=12,40
 
@@ -395,7 +409,7 @@ class FoodSuggestionsView(APIView):
         )
 
 
-class MealSuggestionsView(APIView):
+class MealSuggestionsView(FoodSuggestionsGateMixin, APIView):
     """
     GET /nutrition/suggestions/meals/?meal_type=lunch&date=2026-10-19&limit=3&explain=true&exclude=12,40
 

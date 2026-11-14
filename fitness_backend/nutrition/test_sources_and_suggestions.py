@@ -13,7 +13,7 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -338,6 +338,7 @@ class OpenFoodFactsRetryTests(TestCase):
 # ------------------------------------------------------- search + custom food
 
 
+@override_settings(FOOD_SUGGESTIONS_ENABLED=True)
 class SearchAndCustomFoodTests(APITestCase):
     def setUp(self):
         self.user = Account.objects.create_user(email="a@test.com", password="pass12345")
@@ -437,6 +438,7 @@ class SearchAndCustomFoodTests(APITestCase):
 # ------------------------------------------------------------ suggestions
 
 
+@override_settings(FOOD_SUGGESTIONS_ENABLED=True)
 class SuggestionTests(APITestCase):
     def setUp(self):
         self.user = Account.objects.create_user(email="a@test.com", password="pass12345")

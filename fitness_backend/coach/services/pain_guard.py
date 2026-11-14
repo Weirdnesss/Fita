@@ -20,7 +20,7 @@ PAIN_WORDS = re.compile(
     re.IGNORECASE,
 )
 BODY_PARTS = re.compile(
-    r"\b(knees?|shoulders?|elbows?|wrists?|ankles?|hips?|neck|lower back|joints?|spine)\b",
+    r"\b(knees?|shoulders?|elbows?|wrists?|ankles?|hips?|neck|lower back|joints?|spine|back|legs?)\b",
     re.IGNORECASE,
 )
 FEELING_WORDS = re.compile(

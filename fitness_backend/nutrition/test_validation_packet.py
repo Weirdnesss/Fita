@@ -260,9 +260,19 @@ class PacketFilesTests(FoodsMixin, TestCase):
             packet = vp.build_packet(goals=(2000,), meals=("lunch",))
             out = vp.write_packet(packet, Path(tmp) / "nested" / "packet")
             self.assertEqual({p.name for p in out.iterdir()},
-                             {"rules.md", "summary.md", "sample_plates.csv", "estimated_foods.csv", "raw_looking_foods.csv"})
+                             {"rules.md", "summary.md", "sample_plates.csv", "estimated_foods.csv", "raw_looking_foods.csv",
+                              "review_form.md", "coach_rules.md"})
             self.assertIn(packet.fingerprint, (out / "rules.md").read_text(encoding="utf-8"))
             self.assertIn(packet.fingerprint, (out / "summary.md").read_text(encoding="utf-8"))
+
+    def test_review_form_is_written_with_the_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = vp.build_packet(goals=(2000,), meals=("lunch",))
+            out = vp.write_packet(packet, tmp)
+            form = (out / "review_form.md").read_text(encoding="utf-8")
+            self.assertIn(packet.fingerprint, form)
+            self.assertIn("Signature", form)
+            self.assertIn("Coach chat", (out / "coach_rules.md").read_text(encoding="utf-8"))
 
     def test_csvs_have_the_documented_headers_and_keep_filipino_characters(self):
         with tempfile.TemporaryDirectory() as tmp:

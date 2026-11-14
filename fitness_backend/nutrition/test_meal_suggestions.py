@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -37,6 +37,7 @@ def log(user, food, servings=1.0, meal_type="lunch", date=None):
     return FoodEntry.objects.create(daily_entry=daily, food_item=food, meal_type=meal_type, servings=servings)
 
 
+@override_settings(FOOD_SUGGESTIONS_ENABLED=True)
 class PlateTestBase(APITestCase):
     """A small but complete food database, and an authenticated user with the default 2000 kcal goals."""
 

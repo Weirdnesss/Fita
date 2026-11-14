@@ -378,9 +378,6 @@ export default function NutritionDashboard() {
               <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate("/nutrition/search", { state: { date: selectedDate } })}>
                 Add Food
               </button>
-              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => navigate("/nutrition/suggestions", { state: { date: selectedDate } })}>
-                Meal Ideas
-              </button>
             </>
           ) : (
             <p style={{ flex: 1, fontSize: 12, color: "var(--text-faint)", display: "flex", alignItems: "center" }}>

@@ -77,6 +77,8 @@ class Packet:
     summary_md: str
     raw_rows: list = field(default_factory=list)
     stats: dict = field(default_factory=dict)
+    form_md: str = ""
+    coach_md: str = ""
 
 
 # --------------------------------------------------------------------------- rules
@@ -510,6 +512,62 @@ def _summary(fingerprint, sample_rows, estimated_rows, used_by_type, raw_rows=()
     return "\n".join(lines) + "\n"
 
 
+def build_coach_md():
+    from coach.services import llm_service
+    lines = ["# Coach chat: safety rules as shipped", ""]
+    lines.append("The coach is the one free-form use of the language model. These are its rules, read from the files in use.")
+    lines += ["", "## System prompt", "", "```text"]
+    try:
+        lines.append(Path(llm_service.PROMPT_FILE).read_text(encoding="utf-8").strip())
+    except OSError:
+        lines.append("(prompt file not found)")
+    lines.append("```")
+    try:
+        from coach.services import pain_guard
+    except ImportError:
+        pain_guard = None
+    lines += ["", "## Pain and injury guard (rule in code)", ""]
+    if pain_guard is None:
+        lines.append("Not installed in this version.")
+    else:
+        lines.append("If a message mentions pain, stiffness, or a possible injury, the reply is forced into a short fixed form and the Detailed setting is ignored for that message.")
+        lines += ["", "```text", pain_guard.PAIN_SYSTEM_BLOCK, "```"]
+    return "\n".join(lines) + "\n"
+
+
+def build_form_md(fingerprint):
+    return f"""# Dietitian review form
+
+Rules fingerprint: `{fingerprint}` (cite this when you sign; it changes whenever a rule changes)
+
+Reviewer name: ____________________  Credentials / license no.: ____________________
+
+Date: ____________________  Years of practice: ____________________
+
+Mark each statement: Agree / Agree with changes / Disagree. Add notes where you do not fully agree.
+
+| # | Statement | Verdict | Notes |
+|---|---|---|---|
+| 1 | The app's limits are appropriate: numbers come only from the food database, the AI only picks among candidates, and suggestions are general guidance, not medical advice (rules.md section 1). | | |
+| 2 | The conditions under which nothing is suggested are sensible (section 2). | | |
+| 3 | The way a meal's calorie target is set from the daily goal is appropriate for gym beginners (section 3). | | |
+| 4 | The plate structure (main item, carb, vegetable, and so on) suits a Filipino diet (section 4). | | |
+| 5 | The limits on the largest portion of a single food are safe and realistic (section 5). | | |
+| 6 | The foods that are never suggested are the right ones, and none are missing (section 6). | | |
+| 7 | The variety rules prevent repetitive or unbalanced suggestions (section 7). | | |
+| 8 | The ranking weights are reasonable (section 8). | | |
+| 9 | Ranking common foods first is appropriate (section 9). | | |
+| 10 | The sample plates for 1,500 to 3,000 kcal are balanced and not extreme (sample_plates.csv; see the flags column). | | |
+| 11 | The calorie and macro values in estimated_foods.csv are acceptable, or my corrections are recorded in that file. | | |
+| 12 | The foods listed in raw_looking_foods.csv are correctly treated as raw or cooked (record any changes in that file). | | |
+| 13 | The chat coach's rules on diets, calories, medical conditions and eating disorders (coach_rules.md) are appropriate for gym beginners. | | |
+
+Anything missing or unsafe that you would change: ______________________________________________
+
+Signature: ____________________
+"""
+
+
 def build_packet(goals=CALORIE_GOALS, meals=MEALS):
     rules_body, fingerprint = build_rules_md()
     sample_rows = build_sample_rows(goals=goals, meals=meals)
@@ -530,7 +588,8 @@ def build_packet(goals=CALORIE_GOALS, meals=MEALS):
     return Packet(rules_md, fingerprint, sample_rows, estimated_rows, summary, raw_rows,
                   stats={"plates": len({(r["scenario"], r["option"]) for r in sample_rows if r["option"]}),
                          "estimated_foods": len(estimated_rows), "raw_looking_foods": len(raw_rows),
-                         "labelled_raw_foods": labelled_raw})
+                         "labelled_raw_foods": labelled_raw},
+                  form_md=build_form_md(fingerprint), coach_md=build_coach_md())
 
 
 def write_packet(packet, out_dir):
@@ -538,6 +597,8 @@ def write_packet(packet, out_dir):
     out.mkdir(parents=True, exist_ok=True)
     (out / "rules.md").write_text(packet.rules_md, encoding="utf-8")
     (out / "summary.md").write_text(packet.summary_md, encoding="utf-8")
+    (out / "review_form.md").write_text(packet.form_md, encoding="utf-8")
+    (out / "coach_rules.md").write_text(packet.coach_md, encoding="utf-8")
     # utf-8-sig so Excel opens the Filipino names correctly
     with open(out / "sample_plates.csv", "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=SAMPLE_COLUMNS, extrasaction="ignore")

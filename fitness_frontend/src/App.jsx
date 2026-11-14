@@ -21,7 +21,6 @@ import HistoryDetail from "./pages/workouts/HistoryDetail";
 
 import NutritionDashboard from "./pages/nutrition/NutritionDashboard";
 import FoodSearch from "./pages/nutrition/FoodSearch";
-import FoodSuggestions from "./pages/nutrition/FoodSuggestions";
 import CustomFoodForm from "./pages/nutrition/CustomFoodForm";
 import NutritionSettings from "./pages/nutrition/NutritionSettings";
 
@@ -69,7 +68,6 @@ export default function App() {
               <Route path="/workouts/history/:id" element={<HistoryDetail />} />
               <Route path="/nutrition" element={<NutritionDashboard />} />
               <Route path="/nutrition/search" element={<FoodSearch />} />
-              <Route path="/nutrition/suggestions" element={<FoodSuggestions />} />
               <Route path="/nutrition/foods/custom" element={<CustomFoodForm />} />
               <Route path="/nutrition/settings" element={<NutritionSettings />} />
 

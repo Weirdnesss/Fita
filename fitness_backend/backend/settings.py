@@ -173,3 +173,7 @@ if DEBUG:
 else:
     EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
     ANYMAIL = {"BREVO_API_KEY": os.environ["BREVO_API_KEY"]}
+
+# Food and meal suggestions ("Meal Ideas") are switched off. Set the environment variable
+# FOOD_SUGGESTIONS_ENABLED=true to turn them back on.
+FOOD_SUGGESTIONS_ENABLED = os.environ.get("FOOD_SUGGESTIONS_ENABLED", "false").strip().lower() in ("1", "true", "yes")
